@@ -34,6 +34,7 @@ use crossterm::{cursor, execute};
 use crate::map::Map;
 use crate::types::RenderState;
 
+pub use compose::Overlay;
 use layout::FrameLayout;
 
 /// Double-buffered kitty image ids (arbitrary; we own the tty's id space).
@@ -111,8 +112,6 @@ pub struct Renderer {
     /// (next transmit id, id to delete) — swapped every frame.
     ids: (u32, u32),
     scene: SceneKind,
-    paused: bool,
-    game_over: bool,
 }
 
 impl Renderer {
@@ -140,37 +139,25 @@ impl Renderer {
             out: Vec::new(),
             ids: (ID_A, ID_B),
             scene: SceneKind::None,
-            paused: false,
-            game_over: false,
         })
     }
 
-    /// Show/hide the "PAUSED" overlay on subsequent gameplay frames.
-    /// (Added for the app: pause state lives outside `RenderState`.)
-    pub fn set_paused(&mut self, paused: bool) {
-        self.paused = paused;
-    }
-
-    /// Show/hide the "GAME  OVER" overlay on subsequent gameplay frames.
-    /// (Added for the app: `Sequence` has no game-over variant.)
-    pub fn set_game_over(&mut self, game_over: bool) {
-        self.game_over = game_over;
-    }
-
-    /// Draw one gameplay frame for `state` over `map`. The frame is the map
-    /// grid plus any HUD padding rows (owned by [`FrameLayout`]) so the
-    /// score/lives HUD never overprints an all-maze grid; for maps that embed
-    /// their own dead rows (classic) the padding is zero and the frame equals
-    /// the map grid.
-    pub fn render_game(&mut self, map: &Map, state: &RenderState) -> io::Result<()> {
+    /// Draw one gameplay frame for `state` over `map`, with the app-owned
+    /// [`Overlay`] flags travelling as frame data (no sticky renderer
+    /// state). The frame is the map grid plus any HUD padding rows (owned by
+    /// [`FrameLayout`]) so the score/lives HUD never overprints an all-maze
+    /// grid; for maps that embed their own dead rows (classic) the padding
+    /// is zero and the frame equals the map grid.
+    pub fn render_game(
+        &mut self,
+        map: &Map,
+        state: &RenderState,
+        overlay: Overlay,
+    ) -> io::Result<()> {
         // FrameLayout owns the frame geometry; the compositor re-derives the
         // same layout internally (an O(tiles) scan, negligible per frame).
         let (lw, lh) = FrameLayout::of_map(map).frame_px();
         self.ensure_scene(SceneKind::Game, lw, lh)?;
-        let overlay = compose::Overlay {
-            paused: self.paused,
-            game_over: self.game_over,
-        };
         let frame = self.comp.game(map, state, overlay);
         Self::transmit(
             frame,

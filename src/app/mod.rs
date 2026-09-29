@@ -1,12 +1,15 @@
-//! Application state machine: menus, loading, gameplay loop, persistence.
+//! Application state machine: menus, loading, gameplay wiring, persistence.
 //!
-//! Owns the fixed-timestep loop: the sim ticks at [`TICK_HZ`] driven by a
-//! monotonic-clock accumulator; rendering happens after ticks and never
-//! mutates the sim, so a slow terminal drops frames, not rules (goal §5).
-//! Long stalls (> ~6 ticks) drop wall time instead of fast-forwarding.
+//! The session loop itself — fixed-timestep accumulator, input sourcing,
+//! recording, pause, end conditions, persistence policy — lives in
+//! [`session::GameSession`] (tty-free; the tests' seam). Here is only the
+//! wiring around it: terminal events in, session stepped, frame out.
+//! Rendering happens after ticks and never mutates the sim, so a slow
+//! terminal drops frames, not rules (goal §5).
 
 pub mod menu;
 pub mod persist;
+pub mod session;
 
 use std::error::Error;
 use std::fs;
@@ -17,12 +20,11 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use crate::map::Map;
 use crate::render::{AppEvent, Key, LoadingScreen, Renderer};
 use crate::replay::Replay;
-use crate::rules::Rules;
-use crate::sim::Game;
-use crate::types::{Difficulty, InputFrame, TICK_HZ};
+use crate::types::Difficulty;
 
 use menu::{MainMenu, MenuAction};
 use persist::Store;
+use session::{GameSession, InputSource, PlayEnd};
 
 const USAGE: &str = "\
 pacmantui - Pac-Man in the terminal with real pixel graphics (kitty protocol)
@@ -255,12 +257,6 @@ enum SessionEnd {
     QuitApp,
 }
 
-enum PlayEnd {
-    Restart,
-    ToMenu,
-    QuitApp,
-}
-
 /// One game plus its restarts. Records scores (never for replay playback,
 /// which must not pollute the tables) and optionally writes a replay file.
 fn game_session(
@@ -280,6 +276,9 @@ fn game_session(
     }
 }
 
+/// Wiring only: pick the input adapter once, then pump terminal events into
+/// the session, step it on the wall clock, and recompose the frame when the
+/// session says it changed (or the terminal resized).
 fn play_once(
     r: &mut Renderer,
     store: &mut Store,
@@ -288,144 +287,55 @@ fn play_once(
     replay_src: Option<&Replay>,
     record_to: Option<&Path>,
 ) -> io::Result<PlayEnd> {
-    let tick_len = Duration::from_secs_f64(1.0 / TICK_HZ);
-    let max_backlog = tick_len * 6;
-
-    let seed = match replay_src {
-        Some(rp) => rp.seed,
-        None => SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0x5EED),
+    let source = match replay_src {
+        Some(rp) => InputSource::replay(rp),
+        None => InputSource::live(wall_clock_seed()),
     };
-    let mut game = Game::new(map.clone(), Rules::classic(), difficulty, seed);
-    let mut recording = Replay::new(map.id().to_string(), difficulty, seed);
-    let persisted_high = store.high_score(map.id(), difficulty);
+    let mut session = GameSession::new(
+        map.clone(),
+        difficulty,
+        source,
+        record_to.map(Path::to_path_buf),
+        store.high_score(map.id(), difficulty),
+    );
 
-    let mut desired: Option<crate::types::Dir> = None;
-    let mut replay_pos = 0usize;
-    let mut paused = false;
-    let mut game_over = false;
-    let mut acc = Duration::ZERO;
     let mut last = Instant::now();
-    r.set_paused(false);
-    r.set_game_over(false);
-
-    let finish = |r: &mut Renderer,
-                  store: &mut Store,
-                  game: &Game,
-                  recording: &Replay,
-                  end: PlayEnd|
-     -> io::Result<PlayEnd> {
-        r.set_paused(false);
-        r.set_game_over(false);
-        if replay_src.is_none() {
-            if game.score() > 0 {
-                store.record_score(map.id(), difficulty, game.score(), game.level());
-                let _ = store.save();
-            }
-            if let Some(p) = record_to {
-                fs::write(p, recording.to_text())?;
-            }
-        }
-        Ok(end)
-    };
-
     // First frame before any input.
-    render_frame(r, &game, persisted_high)?;
+    render_frame(r, &session)?;
 
     loop {
         let mut dirty = false;
         for ev in r.poll_events(Duration::from_millis(2))? {
             match ev {
                 AppEvent::Resized => dirty = true,
-                AppEvent::Key(key) => match key {
-                    Key::Up | Key::Down | Key::Left | Key::Right => {
-                        if replay_src.is_none() {
-                            desired = Some(match key {
-                                Key::Up => crate::types::Dir::Up,
-                                Key::Down => crate::types::Dir::Down,
-                                Key::Left => crate::types::Dir::Left,
-                                _ => crate::types::Dir::Right,
-                            });
-                        }
+                AppEvent::Key(key) => {
+                    if let Some(end) = session.on_key(key) {
+                        session.finish(store)?;
+                        return Ok(end);
                     }
-                    Key::Pause => {
-                        if !game_over {
-                            paused = !paused;
-                            r.set_paused(paused);
-                            dirty = true;
-                        }
-                    }
-                    Key::Escape => {
-                        if game_over || paused {
-                            return finish(r, store, &game, &recording, PlayEnd::ToMenu);
-                        }
-                        paused = true;
-                        r.set_paused(true);
-                        dirty = true;
-                    }
-                    Key::Enter => {
-                        if game_over {
-                            return finish(r, store, &game, &recording, PlayEnd::ToMenu);
-                        }
-                    }
-                    Key::Char('r') => {
-                        if paused || game_over {
-                            return finish(r, store, &game, &recording, PlayEnd::Restart);
-                        }
-                    }
-                    Key::Quit => {
-                        return finish(r, store, &game, &recording, PlayEnd::QuitApp);
-                    }
-                    _ => {}
-                },
+                }
             }
         }
 
         let now = Instant::now();
         let dt = now - last;
         last = now;
-        let mut ticked = false;
-        if !paused && !game_over {
-            acc += dt;
-            if acc > max_backlog {
-                // A long stall (window drag, SIGSTOP…) drops wall time instead
-                // of fast-forwarding the rules.
-                acc = max_backlog;
-            }
-            while acc >= tick_len && !game_over {
-                acc -= tick_len;
-                let input = match replay_src {
-                    Some(rp) => {
-                        let f = rp.inputs.get(replay_pos).copied().unwrap_or_default();
-                        replay_pos += 1;
-                        f
-                    }
-                    None => InputFrame { dir: desired },
-                };
-                let events = game.tick(input);
-                recording.push(input);
-                ticked = true;
-                for ev in &events {
-                    if let crate::types::Event::GameOver = ev {
-                        game_over = true;
-                        r.set_game_over(true);
-                    }
-                }
-            }
-        }
-
-        if ticked || dirty {
-            render_frame(r, &game, persisted_high)?;
+        if session.advance(dt) || dirty {
+            render_frame(r, &session)?;
         }
     }
 }
 
-fn render_frame(r: &mut Renderer, game: &Game, persisted_high: u32) -> io::Result<()> {
-    let mut rs = game.render_state();
-    rs.high_score = rs.high_score.max(persisted_high).max(rs.score);
-    r.render_game(game.map(), &rs)
+/// Seed for a live game: the wall clock (replay playback dictates its own).
+fn wall_clock_seed() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0x5EED)
+}
+
+fn render_frame(r: &mut Renderer, s: &GameSession) -> io::Result<()> {
+    r.render_game(s.map(), &s.render_state(), s.overlay())
 }
 
 #[cfg(test)]

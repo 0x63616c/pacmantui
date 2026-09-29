@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use pacmantui::map::Map;
-use pacmantui::render::{AppEvent, Key, Renderer};
+use pacmantui::render::{AppEvent, Key, Overlay, Renderer};
 use pacmantui::types::{Dir, GhostId, GhostRender, GhostState, RenderState, Sequence};
 
 fn main() -> std::io::Result<()> {
@@ -71,7 +71,7 @@ fn main() -> std::io::Result<()> {
             energizer_blink_on: (tick / 10).is_multiple_of(2),
             pac_visible: true,
         };
-        r.render_game(&map, &state)?;
+        r.render_game(&map, &state, Overlay::default())?;
         let _ = Dir::Up; // silence unused import when not otherwise referenced
     }
 }
