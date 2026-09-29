@@ -252,10 +252,8 @@ pub fn draw_game(fb: &mut Frame, view: &GameView, kind_at: impl Fn(i32, i32) -> 
                         sprites::rgb(sprites::DOT_PEACH),
                     );
                 }
-                TileKind::Energizer => {
-                    if st.energizer_blink_on {
-                        fb.blit(&sprites::ENERGIZER, tx * 8, ty * 8);
-                    }
+                TileKind::Energizer if st.energizer_blink_on => {
+                    fb.blit(&sprites::ENERGIZER, tx * 8, ty * 8);
                 }
                 _ => {}
             }
