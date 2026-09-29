@@ -63,6 +63,23 @@ Repo: github.com/0x63616c/pacmantui (public — user's explicit choice, for free
   226 total green) and figures 16–18 re-captured on the fixed build
   (docs/validation/03-live-gameplay.md "Post-release fix").
 
+## Architecture deepening (2026-09-29)
+
+Accepted review, four candidates shipped (details: ARCHITECTURE.md
+"Deepening pass", glossary: CONTEXT.md):
+
+1. FrameLayout owns the map-grid→frame mapping (render/layout.rs).
+2. Compositor is the render layer's interface and test surface
+   (render/compose.rs; test_api retired).
+3. Sequence PhasePolicy: phase meaning declared once, interpreted by tick
+   and snapshot (sim/sequence.rs).
+4. GameSession/InputSource: the session loop behind a tty-free interface;
+   live-vs-replay as one seam with two adapters; overlays as frame data
+   (app/session.rs).
+
+239 tests green; bot_clear identity runs unchanged (classic 4600/4558t,
+custom 6360/5743t).
+
 ## Operational notes for real-terminal work
 
 - Fresh-pixel screenshots: `docs/validation/snap_cmux.sh out.png` (focus-flip;

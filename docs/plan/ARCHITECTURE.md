@@ -66,6 +66,27 @@ main ─▶ app (menus/state machine/loop) ─▶ render (kitty gfx, terminal li
 - Records (map id, rules id, seed, per-tick inputs); replays through `sim` for
   tests and for reaching deep states honestly. Used by integration tests.
 
+## Deepening pass (post-validation)
+
+Four seams named after live validation, each replacing an implicit contract
+that had already produced (or nearly produced) a bug (glossary: CONTEXT.md):
+
+- **FrameLayout** (`render/layout.rs`) — one owner of the map-grid→frame
+  mapping (HUD padding rows, maze origin, HUD anchors); pad arithmetic had
+  been re-derived per draw site and broke once (custom-map HUD overprint).
+- **Compositor as test surface** (`render/compose.rs`) — the pure-CPU
+  compositor is the render module's interface; prod tty and tests cross the
+  same seam, retiring the parallel `test_api` surface that could drift.
+- **Sequence PhasePolicy** (`sim/sequence.rs`) — what each frozen-play phase
+  means (subsystems/visibility/timing) declared once and interpreted by tick
+  and snapshot; both post-validation sim bugs were rows transcribed into one
+  interpreter but not the other.
+- **GameSession / InputSource** (`app/session.rs`) — the session loop
+  (fixed-tick accumulator, recording, pause, end conditions, persistence
+  policy) behind a tty-free interface; live-vs-replay is one seam with two
+  adapters instead of four scattered conditionals, and overlay flags travel
+  as frame data instead of sticky renderer state.
+
 ## Testing strategy (summary; details in TESTPLAN.md)
 - Unit: per-module. Table tests assert against values hand-copied from
   docs/research/tables.md by a DIFFERENT agent than the one writing rules code.
