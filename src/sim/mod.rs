@@ -65,6 +65,12 @@
 //!   from `rules.level_spec(level, Difficulty::Normal)` (tables.md A.2
 //!   prose; review finding F2 in docs/plan/review-rules.md).
 //!
+//! # Non-Playing sequences
+//!
+//! Per-phase policy — which subsystems keep ticking, actor visibility,
+//! duration/transition — is declared once in [`sequence`]; `sequence_tick`
+//! and `render_state` interpret it.
+//!
 //! Determinism: fixed arrays (no map iteration), integer math only.
 //!
 //! Owner: W1-SIM agent. Public signatures are the contract; extend, don't break.
@@ -72,6 +78,7 @@
 pub mod timings;
 
 mod actors;
+mod sequence;
 
 pub use actors::chase_target;
 
@@ -340,26 +347,12 @@ impl Game {
     // --- render snapshot -------------------------------------------------
 
     /// Renderer snapshot for the current state. Fills every field.
+    ///
+    /// Visibility interprets the phase policy ([`sequence::policy`]): actor
+    /// visibility and blink-steadiness are (b) rows of the table, never
+    /// hand-listed here.
     pub fn render_state(&self) -> RenderState {
-        let first_ready_hidden = matches!(self.sequence, Sequence::Ready { tick }
-            if self.first_start && tick < timings::READY_FIRST_NO_ACTORS_TICKS);
-        let ghosts_hidden = first_ready_hidden
-            || self.game_over
-            || match self.sequence {
-                // Ghosts vanish when the death animation proper starts
-                // (supplements §3) and at the first level-clear flash
-                // (supplements §5).
-                Sequence::DeathAnim { .. } => true,
-                Sequence::LevelFlash { tick } => tick >= timings::LEVEL_CLEAR_FREEZE_TICKS,
-                _ => false,
-            };
-        // Pac-Man hidden only during the first-start "no actors" READY phase,
-        // while a GhostScoreFreeze popup replaces him (supplements §4/§1),
-        // and at game over (the sequence freezes on the death animation's
-        // last frame, which would otherwise leave the "pop" remnant drawn).
-        let pac_visible = !first_ready_hidden
-            && !self.game_over
-            && !matches!(self.sequence, Sequence::GhostScoreFreeze { .. });
+        let policy = sequence::policy(self.sequence, self.first_start, self.game_over);
         let ghost_anim = ((self.anim_tick / timings::GHOST_ANIM_HALF_TICKS) % 2) as u8;
         let ghosts = [0usize, 1, 2, 3].map(|i| {
             let g = &self.ghosts[i];
@@ -370,15 +363,13 @@ impl Game {
                 state: g.state,
                 frightened: g.frightened,
                 anim: ghost_anim,
-                visible: !ghosts_hidden,
+                visible: policy.ghosts_visible,
             }
         });
-        let energizer_blink_on = match self.sequence {
-            // Blink continues through the death freeze/animation and the
-            // ghost-eaten pause; steady during READY!/level-clear
-            // (supplements §3/§1/§12; READY/clear approximation, timings.rs).
-            Sequence::Ready { .. } | Sequence::LevelFlash { .. } => true,
-            _ => (self.blink_tick / timings::ENERGIZER_BLINK_HALF_TICKS).is_multiple_of(2),
+        let energizer_blink_on = if policy.energizer_steady {
+            true
+        } else {
+            (self.blink_tick / timings::ENERGIZER_BLINK_HALF_TICKS).is_multiple_of(2)
         };
         RenderState {
             pac_pos: self.pac.pos,
@@ -404,7 +395,7 @@ impl Game {
             sequence: self.sequence,
             pellets: self.pellets.clone(),
             energizer_blink_on,
-            pac_visible,
+            pac_visible: policy.pac_visible,
         }
     }
 
@@ -597,109 +588,66 @@ impl Game {
 
     // --- non-Playing sequences -------------------------------------------
 
+    /// One tick of a non-Playing phase: interpret the phase policy
+    /// ([`sequence::policy`]) — run its (a) subsystem rows, then advance
+    /// its (c) duration/transition row. Which subsystems a phase keeps and
+    /// what ends it is declared in the table, never hand-listed here.
     fn sequence_tick(&mut self) {
-        match self.sequence {
-            Sequence::Playing => unreachable!("sequence_tick only runs during sequences"),
-            Sequence::Ready { tick } => {
-                let limit = if self.first_start {
-                    timings::READY_FIRST_TICKS
-                } else {
-                    timings::READY_TICKS
-                };
-                let t = tick + 1;
-                if t >= limit {
-                    self.first_start = false;
-                    self.sequence = Sequence::Playing;
-                } else {
-                    self.sequence = Sequence::Ready { tick: t };
-                }
+        let policy = sequence::policy(self.sequence, self.first_start, self.game_over);
+        let Some((duration, end)) = policy.timing else {
+            unreachable!("sequence_tick only runs during sequences")
+        };
+        // (a) Subsystems, in the fixed arm order the phases shared:
+        // ghost movement (each ghost is in exactly one state), fruit,
+        // popups, sprite anim, energizer blink.
+        let run = policy.run;
+        for i in 0..4 {
+            match self.ghosts[i].state {
+                GhostState::InHouse if run.house_bounce => self.house_bounce(i),
+                GhostState::Leaving if run.house_leave => self.house_leave(i),
+                GhostState::Eyes if run.eyes => self.move_eyes(i),
+                GhostState::Entering if run.eyes => self.house_enter(i),
+                _ => {}
             }
-            Sequence::DeathFreeze { tick } => {
-                // Supplements §3: outside ghosts freeze but housed ghosts
-                // keep bouncing; sprite anim, energizer blink and the fruit
-                // despawn timer keep running. Supplements §10: house
-                // movement incl. outward door transit continues during the
-                // death freeze (only the ghost-eaten pause halts it), so
-                // Leaving ghosts finish their exit; once Active they freeze
-                // like the other outside ghosts.
-                for i in 0..4 {
-                    match self.ghosts[i].state {
-                        GhostState::InHouse => self.house_bounce(i),
-                        GhostState::Leaving => self.house_leave(i),
-                        _ => {}
-                    }
-                }
-                self.fruit_countdown();
-                self.tick_popups();
-                self.anim_tick += 1;
-                self.blink_tick += 1;
-                let t = tick + 1;
-                self.sequence = if t >= timings::DEATH_FREEZE_TICKS {
-                    Sequence::DeathAnim { tick: 0 }
-                } else {
-                    Sequence::DeathFreeze { tick: t }
-                };
+        }
+        if run.fruit {
+            self.fruit_countdown();
+        }
+        if run.popups {
+            self.tick_popups();
+        }
+        if run.sprite_anim {
+            self.anim_tick += 1;
+        }
+        if run.energizer_blink {
+            self.blink_tick += 1;
+        }
+        // (c) Duration / transition.
+        let t = sequence::tick_of(self.sequence) + 1;
+        if t < duration {
+            self.sequence = sequence::with_tick(self.sequence, t);
+            return;
+        }
+        match end {
+            sequence::PhaseEnd::ControlStarts => {
+                self.first_start = false;
+                self.sequence = Sequence::Playing;
             }
-            Sequence::DeathAnim { tick } => {
-                // Ghosts hidden; fruit timer still runs (supplements §3).
-                self.fruit_countdown();
-                self.tick_popups();
-                self.blink_tick += 1;
-                let t = tick + 1;
-                if t >= timings::DEATH_ANIM_TICKS {
-                    self.finish_death();
-                } else {
-                    self.sequence = Sequence::DeathAnim { tick: t };
-                }
+            sequence::PhaseEnd::GhostsVanish => {
+                self.sequence = Sequence::DeathAnim { tick: 0 };
             }
-            Sequence::GhostScoreFreeze { tick, ghost, score } => {
-                // Supplements §1: Pac-Man and live ghosts frozen (in-house
-                // bounce and all gameplay timers paused); eyes of previously
-                // eaten ghosts keep moving; anim/blink/fruit timers run.
-                for i in 0..4 {
-                    match self.ghosts[i].state {
-                        GhostState::Eyes => self.move_eyes(i),
-                        GhostState::Entering => self.house_enter(i),
-                        _ => {}
-                    }
-                }
-                self.fruit_countdown();
-                self.tick_popups();
-                self.anim_tick += 1;
-                self.blink_tick += 1;
-                let t = tick + 1;
-                if t >= timings::GHOST_SCORE_FREEZE_TICKS {
-                    // Score sprite becomes the eyes (supplements §1). Dead
-                    // ghosts never process reversal flags (supplements §12:
-                    // eyes skip the alive-ghost AI), so a reversal queued
-                    // while this ghost was still alive is discarded.
-                    let i = ghost_index(ghost);
-                    self.ghosts[i].state = GhostState::Eyes;
-                    self.ghosts[i].frightened = false;
-                    self.ghosts[i].reverse_pending = false;
-                    self.ghosts[i].accum = 0;
-                    self.sequence = Sequence::Playing;
-                } else {
-                    self.sequence = Sequence::GhostScoreFreeze {
-                        tick: t,
-                        ghost,
-                        score,
-                    };
-                }
+            sequence::PhaseEnd::DeathResolves => self.finish_death(),
+            sequence::PhaseEnd::EyesReplaceScore(ghost) => {
+                // Mutations for the policy's EyesReplaceScore row (see its
+                // supplements §1/§12 citations).
+                let i = ghost_index(ghost);
+                self.ghosts[i].state = GhostState::Eyes;
+                self.ghosts[i].frightened = false;
+                self.ghosts[i].reverse_pending = false;
+                self.ghosts[i].accum = 0;
+                self.sequence = Sequence::Playing;
             }
-            Sequence::LevelFlash { tick } => {
-                // Freeze, then 4 white flashes at 12 ticks/phase, then a
-                // short blank (supplements §5). Everything static.
-                let total = timings::LEVEL_CLEAR_FREEZE_TICKS
-                    + timings::LEVEL_CLEAR_FLASHES * 2 * timings::LEVEL_CLEAR_FLASH_HALF_TICKS
-                    + timings::LEVEL_CLEAR_BLANK_TICKS;
-                let t = tick + 1;
-                if t >= total {
-                    self.start_next_level();
-                } else {
-                    self.sequence = Sequence::LevelFlash { tick: t };
-                }
-            }
+            sequence::PhaseEnd::NextLevelStarts => self.start_next_level(),
         }
     }
 
