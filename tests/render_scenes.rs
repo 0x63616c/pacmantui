@@ -192,6 +192,7 @@ fn base_state() -> RenderState {
         sequence: Sequence::Playing,
         pellets: vec![false; 100],
         energizer_blink_on: false,
+        pac_visible: true,
     }
 }
 

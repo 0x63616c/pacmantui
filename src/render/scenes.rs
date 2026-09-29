@@ -272,17 +272,19 @@ pub fn draw_game(fb: &mut Frame, view: &GameView, kind_at: impl Fn(i32, i32) -> 
         _ => None,
     };
     let (pac_x, pac_y) = (st.pac_pos.x.px() - 8, st.pac_pos.y.px() - 8);
-    match st.sequence {
-        Sequence::DeathAnim { tick } => {
-            let frame = (tick.saturating_mul(8) / timings::DEATH_ANIM_TICKS.max(1)).min(7) as u8;
-            fb.blit(sprites::pac_death_sprite(frame), pac_x, pac_y);
-        }
-        Sequence::GhostScoreFreeze { .. } => {} // pac hidden while score shows
-        Sequence::LevelFlash { .. } => {
-            fb.blit(&sprites::PAC_CLOSED, pac_x, pac_y);
-        }
-        _ => {
-            fb.blit(sprites::pac_sprite(st.pac_dir, st.pac_anim), pac_x, pac_y);
+    if st.pac_visible {
+        match st.sequence {
+            Sequence::DeathAnim { tick } => {
+                let frame =
+                    (tick.saturating_mul(8) / timings::DEATH_ANIM_TICKS.max(1)).min(7) as u8;
+                fb.blit(sprites::pac_death_sprite(frame), pac_x, pac_y);
+            }
+            Sequence::LevelFlash { .. } => {
+                fb.blit(&sprites::PAC_CLOSED, pac_x, pac_y);
+            }
+            _ => {
+                fb.blit(sprites::pac_sprite(st.pac_dir, st.pac_anim), pac_x, pac_y);
+            }
         }
     }
 

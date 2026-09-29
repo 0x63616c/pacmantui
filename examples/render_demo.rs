@@ -69,6 +69,7 @@ fn main() -> std::io::Result<()> {
             sequence: Sequence::Playing,
             pellets,
             energizer_blink_on: (tick / 10).is_multiple_of(2),
+            pac_visible: true,
         };
         r.render_game(&map, &state)?;
         let _ = Dir::Up; // silence unused import when not otherwise referenced

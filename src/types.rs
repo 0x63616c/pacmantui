@@ -246,6 +246,10 @@ pub struct RenderState {
     /// Bit per map tile: pellet still present (indexing via map dims).
     pub pellets: Vec<bool>,
     pub energizer_blink_on: bool,
+    /// Whether Pac-Man is drawn at all. The sim clears this during the
+    /// first-start READY "no actors" phase and while a GhostScoreFreeze
+    /// score popup replaces him; render draws nothing when false.
+    pub pac_visible: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
