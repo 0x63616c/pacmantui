@@ -1,0 +1,6 @@
+# Match CI (dtolnay/rust-toolchain@stable): local builds, hooks, and CI all
+# lint with the same clippy. The machine's default toolchain (pinned older)
+# repeatedly passed locally while CI's newer clippy failed.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

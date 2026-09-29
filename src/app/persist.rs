@@ -149,7 +149,7 @@ impl Store {
             .filter(|e| key(e) == this_key)
             .cloned()
             .collect();
-        table.sort_by(|a, b| b.score.cmp(&a.score));
+        table.sort_by_key(|e| std::cmp::Reverse(e.score));
         table.truncate(MAX_SCORES_PER_TABLE);
         self.scores.retain(|e| key(e) != this_key);
         self.scores.extend(table);
@@ -173,7 +173,7 @@ impl Store {
             .filter(|e| e.map == map && e.difficulty == d)
             .cloned()
             .collect();
-        v.sort_by(|a, b| b.score.cmp(&a.score));
+        v.sort_by_key(|e| std::cmp::Reverse(e.score));
         v
     }
 }
