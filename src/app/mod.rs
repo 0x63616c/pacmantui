@@ -125,7 +125,13 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             };
             match mm.on_key(key, maps.len()) {
                 MenuAction::None => {}
-                MenuAction::Quit => return Ok(()),
+                MenuAction::Quit => {
+                    // Persist menu selections even when quitting without playing.
+                    store.settings.map = maps[mm.map_idx].id().to_string();
+                    store.settings.set_difficulty(mm.difficulty);
+                    let _ = store.save();
+                    return Ok(());
+                }
                 MenuAction::Controls => controls_loop(&mut r)?,
                 MenuAction::Scores => {
                     scores_loop(&mut r, &store, &maps, mm.map_idx, mm.difficulty)?

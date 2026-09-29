@@ -135,7 +135,7 @@ pub fn controls_screen() -> MenuScreen {
         items: vec![
             row("MOVE", "ARROWS OR WASD"),
             row("PAUSE", "P"),
-            row("RESTART", "R WHEN PAUSED"),
+            row("RESTART", "R IF PAUSED"),
             row("MENU", "ESC"),
             row("QUIT", "Q OR CTRL C"),
         ],
