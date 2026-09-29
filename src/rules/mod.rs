@@ -11,7 +11,7 @@
 //! One tick = one sim frame. The source tables give durations in seconds; the
 //! arcade counts frames, so durations are stored as `round(seconds * 60)`
 //! ticks (all source values are integral seconds, so the conversion is exact).
-//! Interpretation note (tables.md; mechanics doc §8.3): the arcade's real
+//! Interpretation note (tables.md; mechanics doc §6): the arcade's real
 //! frame rate is 60.606061 Hz — Table A.1's title defines "100% speed =
 //! 75.75757625 pixels/sec", i.e. 1.25 px/frame at 60.606061 Hz — so N table
 //! "seconds" elapse in ~1% less wall-clock time than N seconds. The dossier's
