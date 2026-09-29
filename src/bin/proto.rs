@@ -174,10 +174,8 @@ fn emit_frame(
     // cursor to anchor
     out.extend_from_slice(format!("\x1b[{};{}H", layout.anchor_row, layout.anchor_col).as_bytes());
     // zlib-compress (kitty o=z), then transmit f=24 in 4096-byte b64 chunks
-    let mut enc = flate2::write::ZlibEncoder::new(
-        Vec::with_capacity(64 * 1024),
-        flate2::Compression::fast(),
-    );
+    let mut enc =
+        flate2::write::ZlibEncoder::new(Vec::with_capacity(64 * 1024), flate2::Compression::fast());
     enc.write_all(scaled).expect("zlib compress");
     let compressed = enc.finish().expect("zlib finish");
     let payload_len = compressed.len();

@@ -113,7 +113,12 @@ pub enum GhostId {
 }
 
 impl GhostId {
-    pub const ALL: [GhostId; 4] = [GhostId::Blinky, GhostId::Pinky, GhostId::Inky, GhostId::Clyde];
+    pub const ALL: [GhostId; 4] = [
+        GhostId::Blinky,
+        GhostId::Pinky,
+        GhostId::Inky,
+        GhostId::Clyde,
+    ];
 }
 
 /// Global pursuit mode (scatter/chase alternation per schedule).
@@ -154,21 +159,45 @@ pub struct InputFrame {
 /// Simulation events emitted by `Game::tick` (for app/render/sound/tests).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
-    DotEaten { tile: TilePos, score: u32 },
-    EnergizerEaten { tile: TilePos, score: u32 },
-    FruitSpawned { tile: TilePos },
+    DotEaten {
+        tile: TilePos,
+        score: u32,
+    },
+    EnergizerEaten {
+        tile: TilePos,
+        score: u32,
+    },
+    FruitSpawned {
+        tile: TilePos,
+    },
     FruitExpired,
-    FruitEaten { score: u32 },
-    GhostEaten { ghost: GhostId, score: u32, chain: u8 },
-    ModeChanged { mode: Mode },
+    FruitEaten {
+        score: u32,
+    },
+    GhostEaten {
+        ghost: GhostId,
+        score: u32,
+        chain: u8,
+    },
+    ModeChanged {
+        mode: Mode,
+    },
     FrightenedStarted,
     FrightenedEnded,
-    GhostReleased { ghost: GhostId },
+    GhostReleased {
+        ghost: GhostId,
+    },
     ExtraLife,
     PacDying,
-    LifeLost { lives_left: u8 },
-    LevelCleared { level: u32 },
-    NextLevelStarted { level: u32 },
+    LifeLost {
+        lives_left: u8,
+    },
+    LevelCleared {
+        level: u32,
+    },
+    NextLevelStarted {
+        level: u32,
+    },
     GameOver,
 }
 
@@ -178,17 +207,11 @@ pub enum Sequence {
     #[default]
     Playing,
     /// Frozen just after losing a life, before the death animation.
-    DeathFreeze {
-        tick: u32,
-    },
+    DeathFreeze { tick: u32 },
     /// Pac-Man death animation frame counter.
-    DeathAnim {
-        tick: u32,
-    },
+    DeathAnim { tick: u32 },
     /// Board flash after clearing a level (flash phase derivable from tick).
-    LevelFlash {
-        tick: u32,
-    },
+    LevelFlash { tick: u32 },
     /// Brief freeze showing ghost score after eating a ghost.
     GhostScoreFreeze {
         tick: u32,
@@ -196,9 +219,7 @@ pub enum Sequence {
         score: u32,
     },
     /// READY! countdown before control starts.
-    Ready {
-        tick: u32,
-    },
+    Ready { tick: u32 },
 }
 
 /// Snapshot of everything the renderer needs. Produced by `sim`, consumed by
