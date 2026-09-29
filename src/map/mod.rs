@@ -32,7 +32,10 @@ pub struct Map {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MapError {
     Io(String),
-    Syntax { line: usize, msg: String },
+    Syntax {
+        line: usize,
+        msg: String,
+    },
     /// Semantic validation failure with a human-actionable message.
     Invalid(String),
     UnsupportedVersion(u32),
