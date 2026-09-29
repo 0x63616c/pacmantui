@@ -11,14 +11,16 @@ Pittman) as the source of truth for classic-mode mechanics — ghost targeting
 quirks, scatter/chase schedules, house dot counters, Cruise Elroy, cornering,
 the lot. See [Fidelity and deviations](#fidelity-and-deviations).
 
-**Status: under construction** — real-terminal acceptance in progress. See
-`docs/plan/PROGRESS.md` for the live phase status.
+**Status: complete and validated** — live acceptance run in Ghostty with
+pixel-screenshot evidence, arcade-fidelity comparison, and full
+rule→impl→test traceability. See [Validation](#validation).
 
 ## Requirements
 
 - A terminal implementing the kitty graphics protocol **and** pixel-size
   reporting: [Ghostty](https://ghostty.org) and [kitty](https://sw.kovidgoyal.net/kitty/)
-  are known good. tmux/screen are detected and refused (they break graphics
+  are known good (the live acceptance run was performed in Ghostty on
+  macOS). tmux/screen are detected and refused (they break graphics
   passthrough).
 - A window of at least 224×288 pixels for the classic map (the app prints the
   exact requirement, in cells for your font size, if the window is too small).
@@ -28,11 +30,14 @@ the lot. See [Fidelity and deviations](#fidelity-and-deviations).
 
 ```sh
 cargo run --release            # play
-cargo build --release --locked # build ./target/release/pacmantui
+cargo build --release --locked # build, then run ./target/release/pacmantui
 cargo test --all-targets --all-features                        # full test suite
 cargo fmt --check                                              # formatting
 cargo clippy --all-targets --all-features -- -D warnings       # lints
 ```
+
+The full CLI is `--map <FILE.pmtoml>` (repeatable), `--replay <FILE>`,
+`--record <FILE>`, `--version`, `--help`.
 
 ## Controls
 
@@ -88,7 +93,12 @@ pacmantui --record game.replay   # write a replay of each finished game
 pacmantui --replay game.replay   # watch it back through the real engine
 ```
 
-The replay text format (v1) is documented in `src/replay/mod.rs`.
+The replay text format (v1) is documented in `src/replay/mod.rs`. Three
+legal-input replays are committed as acceptance evidence — try
+
+```sh
+./target/release/pacmantui --replay docs/validation/replays/classic-level1-clear.replay
+```
 
 ## Fidelity and deviations
 
@@ -105,6 +115,32 @@ Mechanics are implemented from the Dossier with a traceability matrix
   per-constant provenance comments in `src/sim/timings.rs`
   (`docs/research/arcade-supplements.md`).
 
+## Validation
+
+Real-terminal evidence lives in `docs/validation/`:
+
+- `03-live-gameplay.md` — the live acceptance run: screenshots of fruit,
+  fright chains, level clears, pause/resize/restart, both maps, plus the
+  committed replays re-verified headlessly.
+- `04-fidelity.md` — arcade-fidelity comparison: maze layout, pellets,
+  start positions tile-exact and the palette exact vs reference imagery.
+- `docs/plan/TRACEABILITY.md` — every rule and table value traced from its
+  reference source to the implementation and an independently checked test.
+
+## Limitations
+
+- Sprite art is original, arcade-*inspired*, not pixel-identical (D10), and
+  the tunnel side-pocket wall art / outer border differ cosmetically from
+  the arcade (D15) — maze layout, pellets, and collision are tile-exact.
+- Single-player HUD: no `2UP` area.
+- Level 256 continues safely instead of reproducing the kill screen.
+- Panic-path terminal cleanup is implemented (panic hook + drop) but was
+  not exercised in the live acceptance run; quit and Ctrl-C paths were.
+- The 10,000-point extra life is verified by tests only — attended play
+  never reached it.
+- Hard difficulty is covered by table tests plus one sim test; it was not
+  played live.
+
 ## Architecture
 
 Strict one-way module graph (`docs/plan/ARCHITECTURE.md`): `app` (menus,
@@ -112,6 +148,3 @@ fixed-timestep loop, persistence) → `render` (kitty protocol, terminal
 lifecycle) and `sim` (pure, deterministic, integer-math rules engine) →
 `rules` (transcribed reference tables) and `map`. The sim never touches the
 terminal or the clock; render delays drop frames, never ticks.
-
-Validation evidence (real-terminal screenshots, protocol experiments) is in
-`docs/validation/`.

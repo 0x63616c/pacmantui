@@ -28,13 +28,30 @@ Repo: github.com/0x63616c/pacmantui (public — user's explicit choice, for free
 - [x] W1-RULES: src/rules + table tests (independent review APPROVED — review-rules.md)
 - [x] W1-MAP: map format/parser/validator + classic & Vertigo maps + docs/map-format.md
 - [x] W1-RENDER: kitty renderer, sprites, HUD, menus (+ render_demo, evidence 02)
-- [ ] W1-SIM (agent relaunched 2026-09-28): full arcade rules engine → src/sim, tests/sim_*
+- [x] W1-SIM: full arcade rules engine → src/sim, tests/sim_* (61155b0)
 - [x] W2-APP/REPLAY (lead): app state machine, menus glue, persistence, fixed-timestep
       loop, CLI (--map/--replay/--record), replay text format + tests (app awaits sim)
-- [ ] W2-REVIEW: independent sim/mechanics review after sim lands
-- [ ] Test suite incl. table traceability matrix (docs/plan/TRACEABILITY.md); CI green
-- [ ] Real-terminal playtest + visual acceptance (screenshots in docs/validation/)
-- [ ] Final push, README, handoff
+- [x] W2-REVIEW: independent sim/mechanics review (docs/plan/review-sim.md; F1–F6
+      resolved at fa29a31)
+- [x] Test suite incl. table traceability matrix (docs/plan/TRACEABILITY.md); CI green
+- [x] Real-terminal playtest + visual acceptance (screenshots in docs/validation/)
+- [x] Final push, README, handoff
+
+## Final status (2026-09-29) — COMPLETE / VALIDATED
+
+- Review findings F1–F6 resolved at `fa29a31`; 222 tests green, CI green.
+- The three committed replays re-verified headlessly at that commit —
+  byte-identical outcomes (classic 4600/4558t, vertigo 6360/5743t).
+- Live acceptance run complete: docs/validation/03-live-gameplay.md,
+  figures 10–24 (fruit, fright chain + eyes, level clears on both maps,
+  pause/resize/restart/respawn, menu return, white-flash phase), plus the
+  real-keys menu-tree walkthrough recorded in §Checks without figures.
+- Arcade-fidelity comparison complete: docs/validation/04-fidelity.md —
+  maze/pellets/start positions tile-exact, palette exact; the one cosmetic
+  wall-art finding (F-VIS-1) recorded as deviation D15.
+- docs/plan/TRACEABILITY.md added (rule→impl→independent test, complete for
+  rules/sim/map; deviation ledger D1–D15).
+- ACCEPTANCE.md matrix updated with the live-run evidence.
 
 ## Operational notes for real-terminal work
 
