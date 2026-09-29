@@ -7,6 +7,7 @@
 
 use super::font;
 use super::framebuffer::Frame;
+use super::layout::FrameLayout;
 use super::sprites;
 use super::{LoadingScreen, MenuScreen};
 use crate::map::{Cell, Map};
@@ -214,33 +215,6 @@ fn draw_wall_tile(
     }
 }
 
-/// Extra all-black tile rows the gameplay frame adds above/below the map so
-/// the HUD never overprints the maze: the classic screen reserves 3 dead rows
-/// on top (1UP/score text rows 0-1 plus a spacer) and 2 on the bottom (lives
-/// and fruit strip). A map whose grid already embeds that dead space around
-/// the maze's open-tile bounding box (classic) gets zero padding, so its
-/// frame is unchanged; an all-maze grid (Vertigo) gets the difference.
-///
-/// Returns `(pad_top, pad_bottom)` in tile rows.
-pub fn hud_pad_rows(tw: i32, th: i32, kind_at: &dyn Fn(i32, i32) -> TileKind) -> (i32, i32) {
-    let (mut y0, mut y1) = (i32::MAX, i32::MIN);
-    for ty in 0..th {
-        for tx in 0..tw {
-            if !kind_at(tx, ty).is_wall() {
-                y0 = y0.min(ty);
-                y1 = y1.max(ty);
-            }
-        }
-    }
-    if y0 > y1 {
-        return (0, 0); // no open tiles at all
-    }
-    // Rows above/below the maze border band (one tile beyond the open box).
-    let dead_top = (y0 - 1).max(0);
-    let dead_bottom = ((th - 1) - (y1 + 1)).max(0);
-    ((3 - dead_top).max(0), (2 - dead_bottom).max(0))
-}
-
 /// Level-flash phase from the LevelFlash tick: after the freeze, alternate
 /// white/blue per half-period for the configured number of flashes.
 pub fn flash_is_white(tick: u32) -> bool {
@@ -257,13 +231,9 @@ pub fn flash_is_white(tick: u32) -> bool {
 pub struct GameView<'a> {
     /// Cached static maze layer (exactly tw*8 x th*8 RGB, map-sized).
     pub layer: &'a [u8],
-    pub tw: i32,
-    pub th: i32,
-    /// HUD padding rows above the map grid (see [`hud_pad_rows`]): the frame
-    /// is taller than the map by `pad_top` + the bottom padding, and
-    /// everything maze-anchored draws shifted down by `pad_top` tile rows.
-    /// 0 for maps that embed their own HUD dead space (classic).
-    pub pad_top: i32,
+    /// The frame geometry: owns the map-grid→frame mapping (padding rows,
+    /// maze band origin, HUD anchors) so no draw site does pad arithmetic.
+    pub layout: FrameLayout,
     pub state: &'a RenderState,
     /// Fruit/overlay anchor: pixel center of the fruit spawn (map coords).
     pub fruit_px: (i32, i32),
@@ -273,46 +243,43 @@ pub struct GameView<'a> {
 
 /// Compose one full gameplay frame over the cached maze layer. The frame may
 /// be taller than the map (HUD padding rows, all black): the maze layer and
-/// every maze-anchored element shift down by `view.pad_top` tile rows, while
-/// the HUD anchors to the frame's own top/bottom rows.
+/// every maze-anchored element draw through `view.layout`'s mapping queries,
+/// while the HUD anchors to the frame's own top/bottom rows.
 pub fn draw_game(fb: &mut Frame, view: &GameView, kind_at: impl Fn(i32, i32) -> TileKind) {
     let st = view.state;
-    let oy = view.pad_top * 8;
-    fb.copy_rows_at(view.layer, oy as usize);
+    let lay = &view.layout;
+    let (tw, th) = lay.map_tiles();
+    fb.copy_rows_at(view.layer, lay.maze_origin_px().1 as usize);
 
     // Pellets: peach 2x2 dots at tile centers; energizers blink.
-    for ty in 0..view.th {
-        for tx in 0..view.tw {
+    for ty in 0..th {
+        for tx in 0..tw {
             let present = st
                 .pellets
-                .get((ty * view.tw + tx) as usize)
+                .get((ty * tw + tx) as usize)
                 .copied()
                 .unwrap_or(false);
             if !present {
                 continue;
             }
+            let (px, py) = lay.map_tile_px(tx, ty);
             match kind_at(tx, ty) {
                 TileKind::Dot => {
-                    fb.fill_rect(
-                        tx * 8 + 3,
-                        ty * 8 + 3 + oy,
-                        2,
-                        2,
-                        sprites::rgb(sprites::DOT_PEACH),
-                    );
+                    fb.fill_rect(px + 3, py + 3, 2, 2, sprites::rgb(sprites::DOT_PEACH));
                 }
                 TileKind::Energizer if st.energizer_blink_on => {
-                    fb.blit(&sprites::ENERGIZER, tx * 8, ty * 8 + oy);
+                    fb.blit(&sprites::ENERGIZER, px, py);
                 }
                 _ => {}
             }
         }
     }
 
-    // Fruit on the board.
+    // Fruit on the board (sprite centered on the tile center).
     if let Some(t) = st.fruit {
         let sp = sprites::fruit_sprite(current_fruit_index(st));
-        fb.blit(sp, t.x * 8 + 4 - 8, t.y * 8 + 4 - 8 + oy);
+        let (cx, cy) = lay.map_px(t.x * 8 + 4, t.y * 8 + 4);
+        fb.blit(sp, cx - 8, cy - 8);
     }
 
     // Pac-Man (16x16 sprite centered on his pixel position).
@@ -320,7 +287,8 @@ pub fn draw_game(fb: &mut Frame, view: &GameView, kind_at: impl Fn(i32, i32) -> 
         Sequence::GhostScoreFreeze { ghost, score, .. } => Some((ghost, score)),
         _ => None,
     };
-    let (pac_x, pac_y) = (st.pac_pos.x.px() - 8, st.pac_pos.y.px() - 8 + oy);
+    let (pac_cx, pac_cy) = lay.map_px(st.pac_pos.x.px(), st.pac_pos.y.px());
+    let (pac_x, pac_y) = (pac_cx - 8, pac_cy - 8);
     if st.pac_visible {
         match st.sequence {
             Sequence::DeathAnim { tick } => {
@@ -347,7 +315,8 @@ pub fn draw_game(fb: &mut Frame, view: &GameView, kind_at: impl Fn(i32, i32) -> 
         {
             continue; // replaced by the score popup
         }
-        let (gx, gy) = (g.pos.x.px() - 8, g.pos.y.px() - 8 + oy);
+        let (gcx, gcy) = lay.map_px(g.pos.x.px(), g.pos.y.px());
+        let (gx, gy) = (gcx - 8, gcy - 8);
         match g.state {
             GhostState::Eyes | GhostState::Entering => {
                 fb.blit(sprites::eyes_sprite(g.dir), gx, gy);
@@ -376,7 +345,8 @@ pub fn draw_game(fb: &mut Frame, view: &GameView, kind_at: impl Fn(i32, i32) -> 
     if let Some((eaten, score)) = freeze
         && let Some(g) = st.ghosts.iter().find(|g| g.id == eaten)
     {
-        font::draw_mini_number(fb, g.pos.x.px(), g.pos.y.px() + oy, score, POPUP_CYAN);
+        let (sx, sy) = lay.map_px(g.pos.x.px(), g.pos.y.px());
+        font::draw_mini_number(fb, sx, sy, score, POPUP_CYAN);
     }
 
     // Score popups (skip one duplicating the frozen ghost's).
@@ -392,15 +362,15 @@ pub fn draw_game(fb: &mut Frame, view: &GameView, kind_at: impl Fn(i32, i32) -> 
         } else {
             POPUP_PINK
         };
-        font::draw_mini_number(fb, tile.x * 8 + 4, tile.y * 8 + 4 + oy, value, color);
+        let (mx, my) = lay.map_px(tile.x * 8 + 4, tile.y * 8 + 4);
+        font::draw_mini_number(fb, mx, my, value, color);
     }
 
     // HUD anchors to the frame (map + padding rows), not the map grid.
-    let frame_th = (fb.height() / 8) as i32;
-    draw_hud(fb, st, view.tw, frame_th);
+    draw_hud(fb, st, lay);
 
     // Sequence / app overlays, anchored on the classic fruit row.
-    let (ax, ay) = (view.fruit_px.0, view.fruit_px.1 - 4 + oy);
+    let (ax, ay) = lay.map_px(view.fruit_px.0, view.fruit_px.1 - 4);
     if matches!(st.sequence, Sequence::Ready { .. }) {
         draw_text_centered(fb, ax, ay, "READY!", YELLOW);
     }
@@ -445,34 +415,43 @@ fn draw_text_centered(fb: &mut Frame, cx: i32, y: i32, text: &str, rgb: [u8; 3])
 // --- HUD ---------------------------------------------------------------------
 
 /// HUD: top rows 0-2 (1UP + score, HIGH SCORE + value), bottom two tile rows
-/// (spare lives left, fruit history right). `tw`/`th` are the FRAME's tile
-/// dimensions (map plus any HUD padding rows). Arcade conventions: score
-/// right-aligned ending at col 6, display rolls at 999,999.
-pub fn draw_hud(fb: &mut Frame, st: &RenderState, tw: i32, th: i32) {
-    font::draw_text(fb, 3 * 8, 0, "1UP", WHITE);
+/// (spare lives left, fruit history right). All anchors come from the
+/// [`FrameLayout`], which frames them in FRAME tiles (map plus any HUD
+/// padding rows), never map tiles. Arcade conventions: score right-aligned
+/// ending at col 6, display rolls at 999,999.
+pub fn draw_hud(fb: &mut Frame, st: &RenderState, lay: &FrameLayout) {
+    let (tw, _) = lay.frame_tiles();
+    let (y_labels, y_scores) = lay.hud_text_rows_px();
+    font::draw_text(fb, 3 * 8, y_labels, "1UP", WHITE);
     let hs_label = "HIGH SCORE";
     font::draw_text(
         fb,
         (tw * 8 - font::text_width(hs_label)) / 2,
-        0,
+        y_labels,
         hs_label,
         WHITE,
     );
 
     let score = format!("{:02}", st.score % 1_000_000);
-    font::draw_text(fb, 7 * 8 - font::text_width(&score), 8, &score, WHITE);
+    font::draw_text(
+        fb,
+        7 * 8 - font::text_width(&score),
+        y_scores,
+        &score,
+        WHITE,
+    );
 
     let high = format!("{:02}", st.high_score % 1_000_000);
     font::draw_text(
         fb,
         (tw / 2 + 3) * 8 - font::text_width(&high),
-        8,
+        y_scores,
         &high,
         WHITE,
     );
 
     // Spare lives as mini pac icons, bottom-left.
-    let ly = (th - 2) * 8;
+    let ly = lay.hud_lives_row_px();
     let spare = st.lives.saturating_sub(1).min(5) as i32;
     for k in 0..spare {
         fb.blit(sprites::life_sprite(), (2 + 2 * k) * 8, ly);

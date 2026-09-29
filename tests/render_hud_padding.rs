@@ -68,17 +68,13 @@ fn compose_frame(m: &Map, st: &RenderState) -> Frame {
 fn compose_frame_with(m: &Map, st: &RenderState, paused: bool, game_over: bool) -> Frame {
     let (tw, th) = (m.width(), m.height());
     let kind = |x: i32, y: i32| cell_kind(m, x, y);
-    let (pad_top, pad_bottom) = hud_pad_rows(tw, th, &kind);
+    let lay = FrameLayout::of_map(m);
     let layer = compose_maze_layer(tw, th, &kind, false);
-    let mut fb = Frame::new(
-        (tw * 8) as usize,
-        ((th + pad_top + pad_bottom) * 8) as usize,
-    );
+    let (w, h) = lay.frame_px();
+    let mut fb = Frame::new(w, h);
     let view = GameView {
         layer: &layer,
-        tw,
-        th,
-        pad_top,
+        layout: lay,
         state: st,
         fruit_px: (m.fruit_pos().x.px(), m.fruit_pos().y.px()),
         paused,
@@ -99,8 +95,9 @@ fn pixels(fb: &Frame, y0: i32, y1: i32) -> impl Iterator<Item = (i32, i32, [u8; 
 // --- padding math ------------------------------------------------------------
 
 #[test]
-fn hud_pad_rows_from_open_bounding_box() {
+fn frame_layout_pads_from_open_bounding_box() {
     // Classic-shaped grid: 3 dead rows, border, open, border, 2 dead rows.
+    // No padding: the frame equals the map grid and the maze band starts at 0.
     let classicish = |_x: i32, y: i32| {
         if (4..=6).contains(&y) {
             TileKind::Open
@@ -108,14 +105,19 @@ fn hud_pad_rows_from_open_bounding_box() {
             TileKind::Wall
         }
     };
-    assert_eq!(hud_pad_rows(6, 10, &classicish), (0, 0));
+    let lay = FrameLayout::new(6, 10, &classicish);
+    assert_eq!(lay.frame_tiles(), (6, 10));
+    assert_eq!(lay.maze_origin_px(), (0, 0));
 
-    // All-maze grid, open through both edges (Vertigo shape): full padding.
+    // All-maze grid, open through both edges (Vertigo shape): full padding —
+    // 3 tile rows above (maze band starts at pixel 24) and 2 below.
     let all_open = |_x: i32, _y: i32| TileKind::Open;
-    assert_eq!(hud_pad_rows(6, 10, &all_open), (3, 2));
+    let lay = FrameLayout::new(6, 10, &all_open);
+    assert_eq!(lay.frame_tiles(), (6, 15));
+    assert_eq!(lay.maze_origin_px(), (0, 24));
 
     // Partially embedded dead space: 1 dead row on top (border at row 1,
-    // open from row 2), open through the bottom edge.
+    // open from row 2), open through the bottom edge -> pads (2, 2).
     let partial = |_x: i32, y: i32| {
         if y >= 2 {
             TileKind::Open
@@ -123,11 +125,15 @@ fn hud_pad_rows_from_open_bounding_box() {
             TileKind::Wall
         }
     };
-    assert_eq!(hud_pad_rows(6, 10, &partial), (2, 2));
+    let lay = FrameLayout::new(6, 10, &partial);
+    assert_eq!(lay.frame_tiles(), (6, 14));
+    assert_eq!(lay.maze_origin_px(), (0, 16));
 
     // Degenerate all-wall grid: no open box, no padding.
     let walls = |_x: i32, _y: i32| TileKind::Wall;
-    assert_eq!(hud_pad_rows(6, 10, &walls), (0, 0));
+    let lay = FrameLayout::new(6, 10, &walls);
+    assert_eq!(lay.frame_tiles(), (6, 10));
+    assert_eq!(lay.maze_origin_px(), (0, 0));
 }
 
 // --- classic: zero padding, frame identical to the map grid ------------------
@@ -136,7 +142,9 @@ fn hud_pad_rows_from_open_bounding_box() {
 fn classic_map_needs_no_padding() {
     let m = Map::classic();
     let kind = |x: i32, y: i32| cell_kind(&m, x, y);
-    assert_eq!(hud_pad_rows(m.width(), m.height(), &kind), (0, 0));
+    let lay = FrameLayout::of_map(&m);
+    assert_eq!(lay.frame_tiles(), lay.map_tiles());
+    assert_eq!(lay.maze_origin_px(), (0, 0));
 
     let fb = compose_frame(&m, &bare_state(&m));
     // Frame is exactly the 28x36 map grid: 224x288 px, as before the fix.
@@ -163,7 +171,10 @@ fn custom_map_hud_gets_padded_rows() {
     let (tw, th) = (m.width(), m.height());
     let kind = |x: i32, y: i32| cell_kind(&m, x, y);
     // 32x26 all-maze grid: 3 padding rows on top, 2 on the bottom.
-    assert_eq!(hud_pad_rows(tw, th, &kind), (3, 2));
+    let lay = FrameLayout::of_map(&m);
+    assert_eq!(lay.map_tiles(), (32, 26));
+    assert_eq!(lay.frame_tiles(), (32, 31));
+    assert_eq!(lay.maze_origin_px(), (0, 24));
 
     let fb = compose_frame(&m, &bare_state(&m));
     // Frame is 32x31 tiles = 256x248 px; the maze band sits at tile rows

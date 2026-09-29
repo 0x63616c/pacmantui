@@ -208,16 +208,21 @@ fn test_kind(x: i32, y: i32) -> TileKind {
     }
 }
 
+/// Frame-pixel y of map-pixel y on the test grid: the 10x10 all-maze grid
+/// gets 3 padding tile rows on top, so the maze band starts at pixel 24.
+const OY: i32 = 24;
+
 fn compose(state: &RenderState, paused: bool, game_over: bool) -> Frame {
     let layer = compose_maze_layer(10, 10, &test_kind, false);
-    let mut fb = Frame::new(80, 80);
+    let lay = FrameLayout::new(10, 10, &test_kind);
+    assert_eq!(lay.maze_origin_px(), (0, OY));
+    let (w, h) = lay.frame_px();
+    let mut fb = Frame::new(w, h);
     let view = GameView {
         layer: &layer,
-        tw: 10,
-        th: 10,
-        pad_top: 0,
+        layout: lay,
         state,
-        fruit_px: (40, 60), // overlay anchor inside the 80x80 test frame
+        fruit_px: (40, 60), // overlay anchor (map px) inside the test maze
         paused,
         game_over,
     };
@@ -233,22 +238,22 @@ fn game_frame_actors_pellets_and_walls() {
     let fb = compose(&st, false, false);
 
     // Dot: peach 2x2 at the tile center.
-    assert_eq!(fb.get(19, 19), PEACH_RGB);
-    assert_eq!(fb.get(20, 20), PEACH_RGB);
-    assert_eq!(fb.get(18, 18), BLACK);
+    assert_eq!(fb.get(19, 19 + OY), PEACH_RGB);
+    assert_eq!(fb.get(20, 20 + OY), PEACH_RGB);
+    assert_eq!(fb.get(18, 18 + OY), BLACK);
     // Energizer with blink off: not drawn.
-    assert_eq!(fb.get(28, 28), BLACK);
+    assert_eq!(fb.get(28, 28 + OY), BLACK);
     // Pac closed disc centered on his position (tile 5,5 center = 44,44).
-    assert_eq!(fb.get(43, 43), YELLOW_RGB);
+    assert_eq!(fb.get(43, 43 + OY), YELLOW_RGB);
     // Blinky at tile (7,7): red body, white sclera, blue pupil (looking right).
-    assert_eq!(fb.get(57, 53), RED_RGB);
-    assert_eq!(fb.get(54, 56), WHITE_RGB);
-    assert_eq!(fb.get(56, 56), MAZE_BLUE_RGB);
+    assert_eq!(fb.get(57, 53 + OY), RED_RGB);
+    assert_eq!(fb.get(54, 56 + OY), WHITE_RGB);
+    assert_eq!(fb.get(56, 56 + OY), MAZE_BLUE_RGB);
     // Border wall double line from the maze layer survives compositing.
-    assert_eq!(fb.get(2, 44), MAZE_BLUE_RGB);
-    assert_eq!(fb.get(5, 44), MAZE_BLUE_RGB);
+    assert_eq!(fb.get(2, 44 + OY), MAZE_BLUE_RGB);
+    assert_eq!(fb.get(5, 44 + OY), MAZE_BLUE_RGB);
     // Untouched interior is black.
-    assert_eq!(fb.get(68, 68), BLACK);
+    assert_eq!(fb.get(68, 68 + OY), BLACK);
 }
 
 #[test]
@@ -257,12 +262,12 @@ fn energizer_blinks_with_state_flag() {
     st.pellets[3 * 10 + 3] = true;
     st.energizer_blink_on = true;
     let fb = compose(&st, false, false);
-    assert_eq!(fb.get(28, 28), PEACH_RGB);
+    assert_eq!(fb.get(28, 28 + OY), PEACH_RGB);
     // Missing pellet bit -> nothing, even when blinking.
     let mut st2 = base_state();
     st2.energizer_blink_on = true;
     let fb2 = compose(&st2, false, false);
-    assert_eq!(fb2.get(28, 28), BLACK);
+    assert_eq!(fb2.get(28, 28 + OY), BLACK);
 }
 
 #[test]
@@ -271,9 +276,9 @@ fn popup_drawn_in_mini_font() {
     st.popups.push((TilePos::new(7, 5), 200, 10));
     let fb = compose(&st, false, false);
     // Centered on tile center (60,44): "200" starts at x=55, top row y=42.
-    assert_eq!(fb.get(55, 42), CYAN_RGB);
-    assert_eq!(fb.get(56, 42), CYAN_RGB);
-    assert_eq!(fb.get(57, 42), CYAN_RGB);
+    assert_eq!(fb.get(55, 42 + OY), CYAN_RGB);
+    assert_eq!(fb.get(56, 42 + OY), CYAN_RGB);
+    assert_eq!(fb.get(57, 42 + OY), CYAN_RGB);
 }
 
 #[test]
@@ -282,8 +287,8 @@ fn fruit_on_board_uses_history_symbol() {
     st.fruit = Some(TilePos::new(5, 7)); // center (44,60), sprite at (36,52)
     st.fruit_history = vec![1]; // strawberry: red body with green calyx
     let fb = compose(&st, false, false);
-    // Strawberry body pixel local (4,4) -> (40,56).
-    assert_eq!(fb.get(40, 56), RED_RGB);
+    // Strawberry body pixel local (4,4) -> map px (40,56).
+    assert_eq!(fb.get(40, 56 + OY), RED_RGB);
 }
 
 #[test]
@@ -291,21 +296,21 @@ fn overlays_ready_game_over_paused() {
     let mut st = base_state();
     st.sequence = Sequence::Ready { tick: 0 };
     let fb = compose(&st, false, false);
-    // "READY!" yellow, centered on fruit anchor x=40, top y=56: R at x=16.
-    assert_eq!(fb.get(16, 56), YELLOW_RGB);
+    // "READY!" yellow, centered on fruit anchor x=40, top map y=56: R at x=16.
+    assert_eq!(fb.get(16, 56 + OY), YELLOW_RGB);
 
     let st2 = base_state();
     let fb2 = compose(&st2, false, true);
-    // "GAME  OVER" red: G at x=0, top row bit1 -> (1,56).
-    assert_eq!(fb2.get(1, 56), RED_RGB);
+    // "GAME  OVER" red: G at x=0, top row bit1 -> map px (1,56).
+    assert_eq!(fb2.get(1, 56 + OY), RED_RGB);
 
     let fb3 = compose(&st2, true, false);
-    // "PAUSED" white 32px above the anchor row: P at (16,24).
-    assert_eq!(fb3.get(16, 24), WHITE_RGB);
+    // "PAUSED" white 32px above the anchor row: P at map px (16,24).
+    assert_eq!(fb3.get(16, 24 + OY), WHITE_RGB);
     // Without flags/sequence: nothing at those spots.
     let fb4 = compose(&st2, false, false);
-    assert_eq!(fb4.get(16, 56), BLACK);
-    assert_eq!(fb4.get(16, 24), BLACK);
+    assert_eq!(fb4.get(16, 56 + OY), BLACK);
+    assert_eq!(fb4.get(16, 24 + OY), BLACK);
 }
 
 #[test]
@@ -313,20 +318,20 @@ fn frightened_and_eyes_ghost_states() {
     let mut st = base_state();
     st.ghosts[0].frightened = true;
     let fb = compose(&st, false, false);
-    // Frightened body blue at (57,53) instead of red.
-    assert_eq!(fb.get(57, 53), [33, 33, 255]);
+    // Frightened body blue at map px (57,53) instead of red.
+    assert_eq!(fb.get(57, 53 + OY), [33, 33, 255]);
 
     st.fright_flash = Some(true);
     let fb2 = compose(&st, false, false);
     // Flash phase: body white.
-    assert_eq!(fb2.get(57, 53), WHITE_RGB);
+    assert_eq!(fb2.get(57, 53 + OY), WHITE_RGB);
 
     let mut st3 = base_state();
     st3.ghosts[0].state = GhostState::Eyes;
     let fb3 = compose(&st3, false, false);
     // Eyes only: body pixel transparent (black), sclera white remains.
-    assert_eq!(fb3.get(57, 53), BLACK);
-    assert_eq!(fb3.get(54, 56), WHITE_RGB);
+    assert_eq!(fb3.get(57, 53 + OY), BLACK);
+    assert_eq!(fb3.get(54, 56 + OY), WHITE_RGB);
 }
 
 #[test]
@@ -337,7 +342,7 @@ fn death_animation_uses_shrinking_frames() {
     };
     let fb = compose(&st, false, false);
     // Final frames are the white starburst: no yellow left at pac's center.
-    assert_ne!(fb.get(43, 43), YELLOW_RGB);
+    assert_ne!(fb.get(43, 43 + OY), YELLOW_RGB);
 }
 
 #[test]
@@ -346,17 +351,34 @@ fn invisible_ghosts_are_not_drawn() {
     let fb = compose(&st, false, false);
     // Tile (1,1) center (12,12): sprite would cover (4..20, 4..20); probe
     // body pixels inside tile (1,1), clear of the border wall contour lines.
-    assert_eq!(fb.get(12, 12), BLACK);
-    assert_eq!(fb.get(14, 10), BLACK);
+    assert_eq!(fb.get(12, 12 + OY), BLACK);
+    assert_eq!(fb.get(14, 10 + OY), BLACK);
 }
 
 // --- HUD ---------------------------------------------------------------------
+
+/// A 28x36 classic-shaped grid (its own dead rows, so zero padding): the
+/// frame layout equals the map grid, like the classic map's.
+fn classic_shape(_x: i32, y: i32) -> TileKind {
+    if (4..=32).contains(&y) {
+        TileKind::Open
+    } else {
+        TileKind::Wall
+    }
+}
+
+fn classic_layout() -> FrameLayout {
+    let lay = FrameLayout::new(28, 36, &classic_shape);
+    assert_eq!(lay.frame_tiles(), (28, 36));
+    assert_eq!(lay.maze_origin_px(), (0, 0));
+    lay
+}
 
 #[test]
 fn hud_score_lives_and_fruit_history() {
     let mut fb = Frame::new(224, 288);
     let st = base_state();
-    draw_hud(&mut fb, &st, 28, 36);
+    draw_hud(&mut fb, &st, &classic_layout());
     // "1UP" at col 3: glyph '1' top row pixels at (26,0),(27,0).
     assert_eq!(fb.get(26, 0), WHITE_RGB);
     // Score 1234 right-aligned ending col 6: text starts x=24, row y=8.
@@ -380,7 +402,7 @@ fn hud_score_display_rolls_at_a_million() {
     st.score = 1_000_005;
     st.lives = 1; // no spare icons
     st.fruit_history.clear();
-    draw_hud(&mut fb, &st, 28, 36);
+    draw_hud(&mut fb, &st, &classic_layout());
     // Displays "05": two glyphs ending at col 6 -> x=40..56.
     assert_eq!(fb.get(41, 8), WHITE_RGB); // '0' left edge pixel (0x78 bit1)
     // Nothing further left than the two digits on the score row... the high

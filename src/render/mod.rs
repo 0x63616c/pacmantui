@@ -17,6 +17,7 @@
 mod font;
 mod framebuffer;
 mod kitty;
+mod layout;
 mod scenes;
 mod sprites;
 mod terminal;
@@ -28,8 +29,9 @@ use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::{cursor, execute};
 
 use crate::map::Map;
-use crate::types::{RenderState, Sequence, TILE_PX};
+use crate::types::{RenderState, Sequence};
 
+use layout::FrameLayout;
 use scenes::cell_kind;
 
 /// Double-buffered kitty image ids (arbitrary; we own the tty's id space).
@@ -158,16 +160,15 @@ impl Renderer {
     }
 
     /// Draw one gameplay frame for `state` over `map`. The frame is the map
-    /// grid plus any HUD padding rows (see [`scenes::hud_pad_rows`]) so the
+    /// grid plus any HUD padding rows (owned by [`FrameLayout`]) so the
     /// score/lives HUD never overprints an all-maze grid; for maps that embed
     /// their own dead rows (classic) the padding is zero and the frame equals
     /// the map grid.
     pub fn render_game(&mut self, map: &Map, state: &RenderState) -> io::Result<()> {
         let (tw, th) = (map.width(), map.height());
         let kind_at = |x: i32, y: i32| cell_kind(map, x, y);
-        let (pad_top, pad_bottom) = scenes::hud_pad_rows(tw, th, &kind_at);
-        let lw = (tw * TILE_PX) as usize;
-        let lh = ((th + pad_top + pad_bottom) * TILE_PX) as usize;
+        let frame_layout = FrameLayout::of_map(map);
+        let (lw, lh) = frame_layout.frame_px();
         self.ensure_scene(SceneKind::Game, lw, lh)?;
         if self.maze_key.as_deref() != Some(map.id()) {
             self.maze_blue = scenes::compose_maze_layer(tw, th, &kind_at, false);
@@ -185,9 +186,7 @@ impl Renderer {
         let fruit = map.fruit_pos();
         let view = scenes::GameView {
             layer,
-            tw,
-            th,
-            pad_top,
+            layout: frame_layout,
             state,
             fruit_px: (fruit.x.px(), fruit.y.px()),
             paused: self.paused,
@@ -241,12 +240,10 @@ impl Renderer {
     }
 
     /// Minimum terminal size check for the given map at 1x; returns a
-    /// human-readable requirement string when too small.
+    /// human-readable requirement string when too small. The requirement is
+    /// owned by [`FrameLayout`], the same geometry `render_game` composes to.
     pub fn size_check(&self, map: &Map) -> Result<(), String> {
-        let kind_at = |x: i32, y: i32| cell_kind(map, x, y);
-        let (pad_top, pad_bottom) = scenes::hud_pad_rows(map.width(), map.height(), &kind_at);
-        let need_w = (map.width() * TILE_PX) as usize;
-        let need_h = ((map.height() + pad_top + pad_bottom) * TILE_PX) as usize;
+        let (need_w, need_h) = FrameLayout::of_map(map).min_terminal_px();
         if self.layout.px_w >= need_w && self.layout.px_h >= need_h {
             return Ok(());
         }
@@ -349,9 +346,10 @@ pub mod test_api {
     };
     pub use super::framebuffer::{Frame, scale_up};
     pub use super::kitty::{CHUNK, FrameParams, write_frame};
+    pub use super::layout::FrameLayout;
     pub use super::scenes::{
         GameView, MENU_H, MENU_W, TileKind, cell_kind, compose_loading, compose_maze_layer,
-        compose_menu, draw_game, draw_hud, flash_is_white, hud_pad_rows,
+        compose_menu, draw_game, draw_hud, flash_is_white,
     };
     pub use super::sprites::{
         BODY, CYAN, DOOR_PINK, DOT_PEACH, ENERGIZER, EYES_D, EYES_L, EYES_R, EYES_U, FRIGHT_A,
