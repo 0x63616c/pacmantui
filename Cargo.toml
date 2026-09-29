@@ -1,0 +1,13 @@
+[package]
+name = "pacmantui"
+version = "0.1.0"
+edition = "2024"
+description = "Pac-Man in the terminal with real pixel graphics via the Kitty Graphics Protocol"
+license = "MIT"
+repository = "https://github.com/0x63616c/pacmantui"
+
+[dependencies]
+
+[profile.release]
+lto = true
+codegen-units = 1
