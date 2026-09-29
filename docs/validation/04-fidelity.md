@@ -140,6 +140,10 @@ actually differs:
 - Fruit strip: bottom-right, row 34, newest fruit in the rightmost slot:
   level 1 shows cherry (k7 = ref), level 2 shows cherry then strawberry with
   strawberry rightmost (c5) — arcade ordering.
+- Post-release: a HUD/maze overprint defect on all-maze custom grids
+  (Vertigo) was found in post-release live play and fixed by
+  bounding-box-derived frame padding, with classic byte-identity preserved
+  (hash-verified); see 03-live-gameplay.md "Post-release fix".
 
 ## 6. Start positions — agreement (sub-pixel)
 

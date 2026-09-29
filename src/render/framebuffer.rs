@@ -52,6 +52,24 @@ impl Frame {
         self.px.copy_from_slice(src);
     }
 
+    /// Clear to black, then copy `src` (whole frame-width RGB rows) starting
+    /// at pixel row `y0`. `src` must fit below `y0`; with `y0 == 0` and a
+    /// full-size `src` this is equivalent to [`Frame::copy_from`].
+    pub fn copy_rows_at(&mut self, src: &[u8], y0: usize) {
+        let row = self.w * 3;
+        assert!(
+            row > 0 && src.len().is_multiple_of(row),
+            "layer width mismatch"
+        );
+        let start = y0 * row;
+        assert!(
+            start + src.len() <= self.px.len(),
+            "layer rows out of range"
+        );
+        self.px.fill(0);
+        self.px[start..start + src.len()].copy_from_slice(src);
+    }
+
     /// Set one pixel; out-of-bounds coordinates are ignored.
     pub fn put(&mut self, x: i32, y: i32, rgb: [u8; 3]) {
         if x < 0 || y < 0 || x >= self.w as i32 || y >= self.h as i32 {

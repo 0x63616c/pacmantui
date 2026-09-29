@@ -215,6 +215,7 @@ fn compose(state: &RenderState, paused: bool, game_over: bool) -> Frame {
         layer: &layer,
         tw: 10,
         th: 10,
+        pad_top: 0,
         state,
         fruit_px: (40, 60), // overlay anchor inside the 80x80 test frame
         paused,

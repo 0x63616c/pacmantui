@@ -70,16 +70,25 @@ Evidence files: `evidence/10-*.png` … `evidence/24-*.png`.
   (score 4670), reached via Esc — Esc pauses, a second Esc goes to the menu,
   per the app's documented key map; `q` from pause quits cleanly to the
   prompt. Verifies the pause overlay over live level-2 state.
-- **16 — Vertigo first fruit** (`16-vertigo-fruit1.png`): vertigo replay
-  shortly after the first fruit (t=1351), score 1330 — a genuinely different
-  landscape-orientation maze (32x26) with its own letterbox geometry, cherry
-  on the corridor below the low-center house.
-- **17 — Vertigo clear flash** (`17-vertigo-clear-flash.png`): the vertigo
-  clear sequence past tick 120 — empty board, final score 6360 (equal to the
-  headless result), ghosts hidden, Pac-Man visible.
-- **18 — Vertigo level-2 READY!** (`18-vertigo-level2-ready.png`): fresh
-  vertigo board with its corner energizers, cherry+strawberry HUD strip,
-  score 6360 carried.
+- **16 — Vertigo first fruit** (`16-vertigo-fruit1.png`): re-captured on the
+  fixed build (see "Post-release fix" below) — vertigo replay shortly after
+  the first fruit (t=1351), score 1300, cherry on the corridor below the
+  low-center house; Inky/Pinky/Blinky are out, Clyde still housed. The HUD
+  now sits in its own padded bands, clear of the maze. HIGH SCORE reads 2020,
+  persisted from the user's own play session — incidentally live evidence of
+  high-score persistence.
+- **17 — Vertigo clear flash** (`17-vertigo-clear-flash.png`): re-captured on
+  the fixed build — the vertigo clear sequence past tick 120: empty board,
+  final score 6360 (equal to the headless result), ghosts hidden, Pac-Man
+  visible. The bottom corridor, previously overprinted by the lives/fruit
+  strip, is now fully visible.
+- **18 — Vertigo level 2** (`18-vertigo-level2-ready.png`): re-captured on
+  the fixed build — fresh vertigo board immediately after the level-2 READY!
+  banner cleared (capture timing kept missing the ~2-second window), Pac-Man
+  at his row-7 spawn with the start-configuration ghosts, cherry+strawberry
+  HUD strip, score 6360 carried. The banner's placement on padded maps is
+  asserted by the headless test `custom_map_banners_shift_into_maze_band`
+  (tests/render_hud_padding.rs) instead of a screenshot.
 - **19 — menu after Vertigo replay** (`19-menu-after-vertigo-replay.png`):
   main menu reached by Esc (pause) → Esc (menu) from the vertigo replay. The
   menu shows MAP CLASSIC because `--replay` sessions deliberately never write
@@ -105,6 +114,34 @@ Evidence files: `evidence/10-*.png` … `evidence/24-*.png`.
   white-bodied, red-faced flash sprite by the house door, lingering cyan
   "400" popup, score 1010. Cropped from a full-window capture with `sips`
   (the game pane had moved after a pane recreation).
+
+## Post-release fix: custom-map HUD overlap
+
+- After this acceptance run shipped, the user reported in live play that on
+  Vertigo the HUD overprinted the maze — score text on the top
+  border/corridor, the lives+fruit strip on the bottom corridor. A larger
+  window made it obvious.
+- Root cause: the gameplay frame was sized directly from the map grid
+  (src/render/mod.rs took `map.width() x map.height()`), while `draw_hud`
+  paints fixed frame rows — the top two and the bottom two. Classic masked
+  the coupling by embedding 3 dead rows above and 2 below the maze in its
+  own 28x36 grid; Vertigo's all-maze 32x26 grid embeds none, so the HUD
+  landed on maze tiles. It slipped through the original acceptance because
+  at the smaller review scale the overlap read as adjacency.
+- Fix (render layer only): HUD padding is derived from the map's open-tile
+  bounding box — pad_top/pad_bottom = 3/2 minus whatever dead rows the grid
+  already embeds — the maze layer and everything maze-anchored shift down by
+  pad_top tile rows, and the HUD stays anchored to the frame. Classic
+  derives (0,0) padding and was proven byte-identical across the change via
+  six FNV-1a hashes (blue and white-flash maze layers plus four composed
+  frame variants), captured before and after. Vertigo's frame is now 32x31
+  tiles (256x248 px) with the maze band at tile rows 3..28.
+- Regression tests: tests/render_hud_padding.rs
+  (`custom_map_hud_gets_padded_rows`, `custom_map_banners_shift_into_maze_band`,
+  `classic_map_needs_no_padding`, `hud_pad_rows_from_open_bounding_box`).
+  Figures 16–18 above were re-captured on the fixed build and lead-verified
+  live (HUD in its own bands, maze/actors/door correctly shifted, letterbox
+  recentered).
 
 ## Checks without figures
 

@@ -53,6 +53,16 @@ Repo: github.com/0x63616c/pacmantui (public — user's explicit choice, for free
   rules/sim/map; deviation ledger D1–D15).
 - ACCEPTANCE.md matrix updated with the live-run evidence.
 
+## Post-release (2026-09-29)
+
+- User-reported live-play regression: on Vertigo the HUD overprinted the
+  maze (frame was sized from the map grid; classic's embedded dead rows had
+  masked the coupling). Fixed in the render layer by deriving HUD padding
+  rows from the map's open-tile bounding box; classic proven pixel-identical
+  (FNV frame hashes). Regression tests added (tests/render_hud_padding.rs,
+  226 total green) and figures 16–18 re-captured on the fixed build
+  (docs/validation/03-live-gameplay.md "Post-release fix").
+
 ## Operational notes for real-terminal work
 
 - Fresh-pixel screenshots: `docs/validation/snap_cmux.sh out.png` (focus-flip;
