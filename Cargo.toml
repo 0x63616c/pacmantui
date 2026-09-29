@@ -10,6 +10,8 @@ repository = "https://github.com/0x63616c/pacmantui"
 base64 = "0.23.1"
 crossterm = "0.29"
 flate2 = "1.1.10"
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.1.6"
 
 [profile.release]
 lto = true
