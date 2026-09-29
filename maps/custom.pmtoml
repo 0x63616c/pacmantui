@@ -1,0 +1,76 @@
+# "Vertigo" — the shipped custom map. Format spec: docs/map-format.md.
+#
+# Deliberately different from the classic maze:
+#   - 32x26 grid (wider and much shorter than the classic 28x36)
+#   - TWO VERTICAL tunnels (columns 3 and 28 warp top edge <-> bottom edge)
+#     instead of the classic single horizontal tunnel row
+#   - ghost house sits low-center; Pac-Man spawns ABOVE the house (row 7)
+#     and the fruit appears on the corridor just below the house
+#   - ladder-style wall motif with a full-width central crossing on rows 4/7
+#   - 336 dots + 4 energizers = 340 pellets (not 244): dot-dependent rule
+#     thresholds scale by 340/244 (see docs/map-format.md "Rule adaptations")
+
+format_version = 1
+name = "Vertigo"
+id = "vertigo"
+
+# Legend: '#' wall  '.' dot  'o' energizer  ' '/'_' path (no dot)
+# '-' door  'H' house interior  'T' tunnel (ghost slowdown) tile.
+# Tunnel slowdown zones: rows 0-1 and 24-25 in columns 3 and 28.
+grid = '''
+###T########################T###
+#..T...........##...........T..#
+#o#.##.##.##.#.##.#.##.##.##.#o#
+#.#.##.##.##.#.##.#.##.##.##.#.#
+#..............................#
+#.#.##.##.##.######.##.##.##.#.#
+#.#.##.##.##.######.##.##.##.#.#
+#..............  ..............#
+#.#.##.#####.######.#####.##.#.#
+#.#.##.#####.######.#####.##.#.#
+#..............##..............#
+#.#.#####.####.##.####.#####.#.#
+#.#.#####.####.##.####.#####.#.#
+#..........          ..........#
+#.#.##.#### ###--### ####.##.#.#
+#.#.##.#### #HHHHHH# ####.##.#.#
+#.#.##.#### #HHHHHH# ####.##.#.#
+#.#.##.#### #HHHHHH# ####.##.#.#
+#.#.##.#### ######## ####.##.#.#
+#..........          ..........#
+#.#.##.##.###.####.###.##.##.#.#
+#.#.##.##.###.####.###.##.##.#.#
+#.............####.............#
+#o#.##.######.####.######.##.#o#
+#..T........................T..#
+###T########################T###
+'''
+
+# No-up decision tiles: flanking the corridor above the house and the two
+# central up-exits on Pac-Man's spawn row.
+no_up_tiles = [[14, 13], [17, 13], [12, 7], [19, 7]]
+
+# Pac-Man starts between (15,7)/(16,7) -> pixel (128,60), above the house.
+# Blinky outside above the door between (15,13)/(16,13) -> (128,108);
+# Pinky center slot (128,132); Inky left slot (112,132); Clyde right (144,132).
+[spawns]
+pac = { tile = [15, 7], offset_px = [4, 0], facing = "left" }
+blinky = { tile = [15, 13], offset_px = [4, 0], facing = "left" }
+pinky = { tile = [15, 16], offset_px = [4, 0], facing = "down" }
+inky = { tile = [13, 16], offset_px = [4, 0], facing = "up" }
+clyde = { tile = [17, 16], offset_px = [4, 0], facing = "up" }
+
+# Scatter corners for this map (off-grid, one row beyond the playfield).
+[scatter]
+blinky = [29, -2]
+pinky = [2, -2]
+inky = [31, 27]
+clyde = [0, 27]
+
+[house]
+center = { tile = [15, 16], offset_px = [4, 0] }
+eyes_target = [15, 13]
+
+# Fruit appears below the pen: boundary of (15,19)/(16,19), pixel (128,156).
+[fruit]
+pos = { tile = [15, 19], offset_px = [4, 0] }
