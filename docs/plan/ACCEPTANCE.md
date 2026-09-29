@@ -49,7 +49,7 @@ required KIND of proof; text captures never count for graphics items.
 ## Engineering
 | # | Requirement | Verify | Status |
 |---|---|---|---|
-| E1 | fmt/clippy -D warnings/test/release-build green locally and in CI | CI run link | ☐ |
+| E1 | fmt/clippy -D warnings/test/release-build green locally and in CI | CI run link | ☑ https://github.com/0x63616c/pacmantui/actions/runs/36574098501 — green at 2ce10e4 (Format, Clippy -D warnings, Test, Release build); full suite also green locally via the pre-push hook |
 | E2 | Table A.1/A.2 fully transcribed w/ provenance, independently reviewed | review record | ◐ agents in flight |
 | E3 | Traceability: rule→impl→independent test | TRACEABILITY.md complete | ☑ docs/plan/TRACEABILITY.md (complete for rules/sim/map at fa29a31, cross-linked to review-rules.md + review-sim.md) |
 | E4 | Replay/scenario tooling, honest labeling | code review | ☐ |
