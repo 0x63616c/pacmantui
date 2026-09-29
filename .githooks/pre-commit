@@ -9,13 +9,18 @@
 files=$(git diff --cached --name-only --diff-filter=ACM | grep '\.rs$')
 [ -z "$files" ] && exit 0
 
-# NOTE: rustfmt ignores --check on stdin (always exits 0), so staged content
-# must go through a real .rs file.
+# NOTE: rustfmt ignores --check on stdin (always exits 0), and running it on
+# a copied tmp file breaks on `mod foo;` declarations (it tries to resolve
+# child files next to the tmp copy). So: format the staged content via stdin
+# (which never recurses into children) and byte-compare with the original.
 fail=0
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/pacmantui-fmt.XXXXXX") || exit 1
 for f in $files; do
     git show ":$f" >"$tmp/staged.rs"
-    if ! rustfmt --edition 2024 --check "$tmp/staged.rs" >/dev/null 2>&1; then
+    if ! rustfmt --edition 2024 <"$tmp/staged.rs" >"$tmp/formatted.rs" 2>/dev/null; then
+        echo "pre-commit: staged content of $f does not parse (rustfmt failed)" >&2
+        fail=1
+    elif ! cmp -s "$tmp/staged.rs" "$tmp/formatted.rs"; then
         echo "pre-commit: staged content of $f is not rustfmt-clean" >&2
         echo "  fix: rustfmt --edition 2024 $f && git add $f" >&2
         fail=1

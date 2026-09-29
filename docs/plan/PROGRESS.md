@@ -2,7 +2,7 @@
 
 Goal: complete, polished Pac-Man in Rust with real pixel graphics inside Ghostty
 via the Kitty Graphics Protocol. Faithful to The Pac-Man Dossier. Data-driven maps.
-Repo: github.com/0x63616c/pacmantui (private).
+Repo: github.com/0x63616c/pacmantui (public — user's explicit choice, for free CI).
 
 ## Environment (verified 2026-09-28)
 
@@ -21,16 +21,18 @@ Repo: github.com/0x63616c/pacmantui (private).
 - [x] Research: rendering → docs/research/rendering.md
 - [x] Research: dossier mechanics → docs/research/dossier-mechanics.md
 - [x] Research: reference tables A.1/A.2 → docs/research/tables.md + tables.json
-- [ ] Research: arcade supplemental timings (agent in flight) → docs/research/arcade-supplements.md
+- [x] Research: arcade supplemental timings → docs/research/arcade-supplements.md
 - [x] Rendering prototype validated in real Ghostty/cmux pane (docs/validation/01-proto.md)
 - [x] Implementation plan + architecture + acceptance matrix (docs/plan/)
 - [x] Module contracts: compiling skeleton committed (types.rs + stubs)
-- [ ] W1-RULES agent (in flight): src/rules + table tests
-- [ ] W1-MAP agent (in flight): map format/parser/validator + classic & custom maps
-- [ ] W1-RENDER agent (in flight): kitty renderer, sprites, HUD, menus
-- [ ] W1-SIM (launch after rules+map land): full arcade rules engine
-- [ ] W2: app flow, persistence, replay tooling; independent review
-- [ ] Test suite incl. table traceability; CI green
+- [x] W1-RULES: src/rules + table tests (independent review APPROVED — review-rules.md)
+- [x] W1-MAP: map format/parser/validator + classic & Vertigo maps + docs/map-format.md
+- [x] W1-RENDER: kitty renderer, sprites, HUD, menus (+ render_demo, evidence 02)
+- [ ] W1-SIM (agent relaunched 2026-09-28): full arcade rules engine → src/sim, tests/sim_*
+- [x] W2-APP/REPLAY (lead): app state machine, menus glue, persistence, fixed-timestep
+      loop, CLI (--map/--replay/--record), replay text format + tests (app awaits sim)
+- [ ] W2-REVIEW: independent sim/mechanics review after sim lands
+- [ ] Test suite incl. table traceability matrix (docs/plan/TRACEABILITY.md); CI green
 - [ ] Real-terminal playtest + visual acceptance (screenshots in docs/validation/)
 - [ ] Final push, README, handoff
 
