@@ -1,6 +1,7 @@
 //! Ghost-house mechanics: personal dot counters, the post-death global
 //! counter with the Clyde-deactivation quirk, the no-dot force-release
-//! timer, bounce/exit motion, and the eyes round trip.
+//! timer, bounce/exit motion, the mode-flip exit-right rule, and the
+//! eyes round trip.
 //! Sources: dossier §3.9/§3.10, arcade-supplements §8/§10; scaling per
 //! docs/map-format.md "Rule adaptations".
 
@@ -47,20 +48,50 @@ fn pinky_releases_immediately_and_exits_in_48_ticks() {
     assert_eq!(p.dir, Dir::Left, "exits facing Left (supplements §7/§10)");
 }
 
-/// Level-1 personal limits: Inky 30, Clyde 60 (dossier §3.10) — the
-/// release event lands on the very tick of the 30th/60th pellet. Pac is
-/// waypoint-driven through a 60-dot sweep of the classic maze's lower half.
+/// Level-1 personal limits: Inky 30, Clyde 60 (dossier §3.10) — but only
+/// the MOST-PREFERRED housed ghost's counter increments, so Clyde's
+/// personal counter starts counting only once Inky exits at pellet 30 and
+/// his release lands on the **90th** pellet overall (30 + limit 60), on
+/// the very tick that pellet is eaten. Pac is waypoint-driven through a
+/// continuous 90-pellet sweep: the lower half, then up col 21 to row 23,
+/// east to the bottom-right pocket (its energizer is pellet 65 — the
+/// fright reversal clears Blinky off pac's tail), back up col 26 and up
+/// col 21 to row 4, finishing westward. Every inter-dot gap stays far
+/// below the 240-tick no-dot timer, so a timer release cannot masquerade
+/// as a counter release (review-sim.md F1: the old 60-pellet route parked
+/// dot-free and observed the force-release at a count that coincidentally
+/// read 60).
 #[test]
-fn classic_level1_inky_at_30_dots_clyde_at_60() {
+fn classic_level1_inky_at_30_dots_clyde_at_90() {
     let mut g = h::classic_game(1);
     h::run_to_playing(&mut g);
     let mut pellets = 0u32;
     let mut inky_at = None;
     let mut clyde_at = None;
-    for _ in 0..1400u32 {
+    let mut clyde_housed_at_60 = false;
+    for _ in 0..2000u32 {
         let (x, y) = h::pac_px(&g);
-        // Waypoint phases (inputs, not expectations).
-        let dir = if y == 212 && x > 52 && clyde_at.is_none() && pellets < 20 {
+        // Waypoint phases (inputs, not expectations); pellet guards
+        // disambiguate positions the route visits twice.
+        let dir = if y == 36 {
+            Dir::Left // row 4 west: pellets 87-90
+        } else if pellets >= 67 && x == 172 && y > 36 {
+            Dir::Up // col-21 climb to row 4: 68-86
+        } else if pellets >= 67 && y == 188 && x > 172 {
+            Dir::Left // row 23 back to col 21 (dot-free)
+        } else if pellets >= 67 && x == 212 && y > 188 {
+            Dir::Up // col 26 back up (dot-free)
+        } else if pellets >= 67 && y == 212 && x < 212 {
+            Dir::Right // reverse out of the pocket
+        } else if pellets >= 63 && y == 212 && x > 196 {
+            Dir::Left // pocket dots 66-67
+        } else if pellets >= 58 && x == 212 && y < 212 {
+            Dir::Down // col 26 down: 63-64, energizer 65
+        } else if pellets >= 57 && y == 188 && x < 212 {
+            Dir::Right // row 23 east: 58-62
+        } else if x == 172 && y > 188 {
+            Dir::Up // col-21 climb: 52-57
+        } else if y == 212 && x > 52 && pellets < 20 {
             Dir::Left
         } else if x == 52 && y < 236 {
             Dir::Down
@@ -72,12 +103,8 @@ fn classic_level1_inky_at_30_dots_clyde_at_60() {
             Dir::Right
         } else if x == 212 && y > 236 {
             Dir::Up
-        } else if y == 236 && x > 172 {
-            Dir::Left
-        } else if x == 172 && y > 212 {
-            Dir::Up
         } else {
-            Dir::Left // final leg along row 26; parks at the 60th pellet
+            Dir::Left // row 23 back to col 21, and the default drift
         };
         let ev = g.tick(InputFrame { dir: Some(dir) });
         let mut ate = false;
@@ -87,26 +114,51 @@ fn classic_level1_inky_at_30_dots_clyde_at_60() {
                     pellets += 1;
                     ate = true;
                 }
+                // Only each ghost's FIRST release carries the counter
+                // semantics under test: a ghost eaten during the fright
+                // window is re-housed and re-released off-count.
                 Event::GhostReleased {
                     ghost: GhostId::Inky,
-                } => inky_at = Some(pellets),
+                } => {
+                    if inky_at.is_none() {
+                        inky_at = Some(pellets);
+                        assert!(ate, "Inky's release lands on a pellet tick");
+                    }
+                }
                 Event::GhostReleased {
                     ghost: GhostId::Clyde,
-                } => clyde_at = Some(pellets),
+                } => {
+                    clyde_at = Some(pellets);
+                    assert!(ate, "Clyde's release lands on a pellet tick");
+                }
                 Event::PacDying => panic!("pac must survive the sweep"),
                 _ => {}
             }
         }
         // Release evaluation runs in the same tick as the pellet (phase
         // order in sim module docs), so correlating with the running count
-        // is exact when both appear in one tick's events.
-        let _ = ate;
+        // is exact when both appear in one tick's events; the `ate`
+        // assertions above prove the counter path, not the no-dot timer.
+        if pellets == 60 && ate {
+            // The wrong impl (every dot into every housed counter) would
+            // release Clyde on this very tick.
+            clyde_housed_at_60 =
+                h::ghost(&g, GhostId::Clyde).state == GhostState::InHouse && clyde_at.is_none();
+        }
         if clyde_at.is_some() {
             break;
         }
     }
     assert_eq!(inky_at, Some(30), "Inky leaves with the 30th pellet");
-    assert_eq!(clyde_at, Some(60), "Clyde leaves with the 60th pellet");
+    assert!(
+        clyde_housed_at_60,
+        "Clyde still housed on the 60th pellet (his counter reads 30)"
+    );
+    assert_eq!(
+        clyde_at,
+        Some(90),
+        "Clyde leaves with the 90th pellet (counter active only after Inky's exit)"
+    );
 }
 
 /// No-dot force release (dossier §3.10): with no dots eaten at all, the
@@ -131,6 +183,57 @@ fn no_dot_timer_force_releases_every_240_ticks() {
             (240, GhostId::Inky),
             (480, GhostId::Clyde),
         ]
+    );
+}
+
+/// Mode-flip exit-right rule (dossier §3.9): a scatter/chase mode change
+/// while a ghost is housed makes it leave the house facing RIGHT instead
+/// of the usual leftward exit (supplements §7/§10; review-sim.md F6).
+///
+/// With no dots eaten, the no-dot timer releases Inky on playing tick 240
+/// and Clyde on 480 (`no_dot_timer_force_releases_every_240_ticks` above).
+/// Door transit from either wing slot is 16 px of x-centering plus the
+/// 24 px climb = 40 px at 0.5 px/tick (supplements §10) = 80 ticks, so
+/// Inky turns Active on tick 320 and Clyde on 560. Level 1's first
+/// scatter→chase flip lands on playing tick 421, not 420 (schedule table;
+/// see `scatter_one_flips_exactly_at_tick_421` in tests/sim_modes.rs):
+/// Inky is already outside (320 < 421) and exits facing Left — the
+/// control case — while the flip catches Clyde still housed, so he exits
+/// facing Right.
+#[test]
+fn mode_flip_while_housed_makes_ghost_exit_right() {
+    let mut g = h::classic_game(1);
+    h::run_to_playing(&mut g);
+    let mut inky_active_at = None;
+    let mut clyde_active_at = None;
+    let mut prev = [GhostState::InHouse; 2];
+    for t in 0..600u32 {
+        g.tick(InputFrame { dir: wiggle(t) });
+        for (i, id) in [GhostId::Inky, GhostId::Clyde].iter().enumerate() {
+            let gh = h::ghost(&g, *id);
+            if prev[i] == GhostState::Leaving && gh.state == GhostState::Active {
+                let rec = Some((t + 1, gh.dir));
+                if i == 0 {
+                    inky_active_at = rec;
+                } else {
+                    clyde_active_at = rec;
+                }
+            }
+            prev[i] = gh.state;
+        }
+        if clyde_active_at.is_some() {
+            break;
+        }
+    }
+    assert_eq!(
+        inky_active_at,
+        Some((320, Dir::Left)),
+        "Inky exits before the flip: normal leftward exit (control case)"
+    );
+    assert_eq!(
+        clyde_active_at,
+        Some((560, Dir::Right)),
+        "the tick-421 flip caught Clyde housed: he exits facing Right"
     );
 }
 
@@ -254,6 +357,62 @@ fn global_counter_7_17_32_with_clyde_deactivation_quirk() {
             (7, GhostId::Clyde), // personal counter 7+2 reaches the limit 9
         ]
     );
+}
+
+/// Outward door transit continues during the death freeze (supplements
+/// §10: house movement, including door-transit outward, is paused during
+/// the ghost-eaten pause but CONTINUES during the death freeze;
+/// review-sim.md F2).
+///
+/// Scenario: the pass map with Blinky moved to tile (6,5) (x=52). Pac
+/// holds Right at 80% = 1 px/tick; after the two dot stops he is at
+/// x = t + 10, Blinky (Elroy-1, 1 px/tick) at x = 52 - t: both reach
+/// x=31 (tile 3) on tick 21 — death. Pinky (limit 0, released on playing
+/// tick 1) climbs 16 px from (48,28) to the exit (48,12) at 0.5 px/tick,
+/// stepping on even calls: by the death tick he has made 20 climb calls =
+/// 10 px, standing at (48,18) still Leaving. The freeze must let him
+/// finish: 1 px per two freeze ticks -> y=17 after freeze tick 0, exit
+/// reached and Active on freeze tick 10, then frozen in place like every
+/// other outside ghost for the rest of the freeze.
+#[test]
+fn leaving_ghost_finishes_door_transit_during_death_freeze() {
+    let src = h::pass_map(0, "1.0", "#_.._______#").replace("tile = [10, 5]", "tile = [6, 5]");
+    let mut g = h::game_on(&src, 1);
+    h::run_to_playing(&mut g);
+    let mut death_tick = None;
+    for t in 1..=40u32 {
+        let ev = g.tick(h::hold(Dir::Right));
+        if ev.iter().any(|e| matches!(e, Event::PacDying)) {
+            death_tick = Some(t);
+            break;
+        }
+    }
+    assert_eq!(death_tick, Some(21), "hand-derived collision tick");
+    let p = h::ghost(&g, GhostId::Pinky);
+    assert_eq!(p.state, GhostState::Leaving, "Pinky mid-transit at death");
+    assert_eq!((p.pos.x.px(), p.pos.y.px()), (48, 18), "10 px climbed");
+
+    for k in 0..60u32 {
+        assert!(matches!(g.sequence(), Sequence::DeathFreeze { tick } if tick == k));
+        g.tick(InputFrame::default());
+        let p = h::ghost(&g, GhostId::Pinky);
+        match k {
+            0 => {
+                assert_eq!(p.pos.y.px(), 17, "transit continues into the freeze");
+                assert_eq!(p.state, GhostState::Leaving);
+            }
+            10 => {
+                assert_eq!(p.state, GhostState::Active, "exit completed mid-freeze");
+                assert_eq!((p.pos.x.px(), p.pos.y.px()), (48, 12));
+            }
+            k if k > 10 => {
+                // Once Active he freezes like every other outside ghost.
+                assert_eq!((p.pos.x.px(), p.pos.y.px()), (48, 12), "frozen at k={k}");
+            }
+            _ => {}
+        }
+    }
+    assert!(matches!(g.sequence(), Sequence::DeathAnim { .. }));
 }
 
 /// Eyes round trip (dossier §3.8; supplements §2/§8): eaten ghost's eyes

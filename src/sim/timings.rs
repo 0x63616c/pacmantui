@@ -12,12 +12,6 @@
 /// ROM decode confirmed at `#26D0` (options 1/2/3/5).
 pub const STARTING_LIVES: u8 = 3;
 
-/// Extra life score threshold. SUPPLEMENT §6: bonus-life DIP default 10,000
-/// (ROM bonus table at `0x2728` = 10/15/20/none in BCD thousands).
-/// `rules::Rules::extra_life_score()` carries the same value; the sim awards
-/// at the rules threshold.
-pub const EXTRA_LIFE_SCORE: u32 = 10_000;
-
 /// READY! total duration at first game start (two phases, intro jingle).
 /// SUPPLEMENT §4: phase A ("PLAYER ONE" + "READY!", no actors) 133–138 f +
 /// phase B (actors visible, "READY!" only) 115–120 f; phase-locked values

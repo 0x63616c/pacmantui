@@ -51,6 +51,17 @@ Nothing blocks: the sim itself is faithful.
 | F5 | NOTE | `src/sim/mod.rs` phase-8 docs / `check_collisions` fruit-eat + `update_fruit` | Two small collision conventions are invented without a doc citation (none exists to cite): (a) fruit is eaten by tile equality with `fruit_pos().tile()` — the boundary-straddling classic fruit (112,164) resolves to tile (14,20) only, so the eat point is asymmetric by up to 8 px by approach side; (b) when a same-tile frightened ghost and a non-frightened ghost coincide in one tick, fixed index order decides. Both are benign and consistent with the tile-collision conventions of dossier §4.1; flagged only for the record. |
 | F6 | NOTE | Test coverage gaps (no wrong behavior found) | Untested documented behaviors: the §3.9 **exit-right** rule (mode change while housed ⇒ ghost leaves facing Right) — `exit_right` is implemented but no test drives it; the §3.10 global-counter **stays-active-forever** branch (Clyde outside at 32 ⇒ later-eaten ghosts only released by the timer) — only the deactivation branch is tested; the flash-**shrink** path of `fright_is_white` (1 s/3-flash levels, half < 14) — flash counts are tested only at L1's 14-tick half; the Hard-difficulty schedule/limits in sim context (Hard is exercised only via the F2 fruit test). None blocks; all are guarded at the `rules` level or by code reading. |
 
+## Resolutions
+
+| # | Resolution |
+|---|------------|
+| F1 | **Fixed** — test rewritten as `classic_level1_inky_at_30_dots_clyde_at_90`: a continuous 90-pellet waypoint route keeps every inter-dot gap far below the 240-tick no-dot timer, asserts Clyde still `InHouse` on the 60th pellet, and the same-tick `ate`-flag correlation on each `GhostReleased` proves the counter path (not the timer). |
+| F2 | **Fixed** in `src/sim/mod.rs` — the `DeathFreeze` arm now runs `house_leave` for `Leaving` ghosts too, so outward door transit continues during the death freeze (supp §10). Regression test: `leaving_ghost_finishes_door_transit_during_death_freeze`. |
+| F3 | **Fixed** — RING header comment corrected to 23 dots + 2 energizers = 25 pellets. |
+| F4 | **Fixed** — dead `EXTRA_LIFE_SCORE` const removed from `src/sim/timings.rs`; its ROM provenance note moved to the `rules::Rules::extra_life_score()` doc. |
+| F5 | **No action**, as the review concluded — benign conventions, flagged for the record. |
+| F6 | The §3.9 exit-right rule is now covered by `mode_flip_while_housed_makes_ghost_exit_right` (tests/sim_house.rs); the other listed gaps remain guarded at the `rules` level or by code reading, per the review. |
+
 ## The seven interpretation decisions (all judged sound)
 
 1. **GhostScoreFreeze semantics** — matches supp §1 in every particular:

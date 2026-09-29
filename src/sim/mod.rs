@@ -617,10 +617,16 @@ impl Game {
             Sequence::DeathFreeze { tick } => {
                 // Supplements §3: outside ghosts freeze but housed ghosts
                 // keep bouncing; sprite anim, energizer blink and the fruit
-                // despawn timer keep running.
+                // despawn timer keep running. Supplements §10: house
+                // movement incl. outward door transit continues during the
+                // death freeze (only the ghost-eaten pause halts it), so
+                // Leaving ghosts finish their exit; once Active they freeze
+                // like the other outside ghosts.
                 for i in 0..4 {
-                    if self.ghosts[i].state == GhostState::InHouse {
-                        self.house_bounce(i);
+                    match self.ghosts[i].state {
+                        GhostState::InHouse => self.house_bounce(i),
+                        GhostState::Leaving => self.house_leave(i),
+                        _ => {}
                     }
                 }
                 self.fruit_countdown();

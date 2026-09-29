@@ -206,7 +206,8 @@ impl Rules {
     }
 
     /// Mechanics doc §5.3: arcade default, one extra life at 10,000 points
-    /// (a DIP-switch matter the dossier does not tabulate).
+    /// (a DIP-switch matter the dossier does not tabulate; supplements §6:
+    /// bonus-life DIP default 10,000, ROM bonus table at `0x2728`).
     pub fn extra_life_score(&self) -> u32 {
         10_000
     }

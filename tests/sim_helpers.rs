@@ -74,8 +74,8 @@ pub fn ghost_px(g: &Game, id: GhostId) -> (i32, i32) {
 // Mini-map: "ring" — a single rectangular corridor loop around a sealed
 // house. There are NO junctions: every ghost decision is forced, so ghost
 // paths are fully deterministic regardless of mode or RNG (frightened picks
-// are constrained to the only legal exit). Pellets: 21 dots + 2 energizers
-// = 23. `threshold_scale` keeps classic dot thresholds unless overridden.
+// are constrained to the only legal exit). Pellets: 23 dots + 2 energizers
+// = 25. `threshold_scale` keeps classic dot thresholds unless overridden.
 //
 // Geometry (12x7 tiles, 96x56 px):
 //   - outer corridor: row 1 (cols 1-10), col 1 (rows 1-5), row 5, col 10
