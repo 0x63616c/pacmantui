@@ -55,7 +55,7 @@ fn main() -> std::io::Result<()> {
             pac_anim: ((tick / 4) % 4) as u8,
             ghosts,
             fright_flash: if frightened {
-                Some((tick / 16) % 2 == 0)
+                Some((tick / 16).is_multiple_of(2))
             } else {
                 None
             },
@@ -68,7 +68,7 @@ fn main() -> std::io::Result<()> {
             fruit_history: vec![0],
             sequence: Sequence::Playing,
             pellets,
-            energizer_blink_on: (tick / 10) % 2 == 0,
+            energizer_blink_on: (tick / 10).is_multiple_of(2),
         };
         r.render_game(&map, &state)?;
         let _ = Dir::Up; // silence unused import when not otherwise referenced
