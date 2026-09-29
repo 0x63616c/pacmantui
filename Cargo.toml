@@ -7,6 +7,9 @@ license = "MIT"
 repository = "https://github.com/0x63616c/pacmantui"
 
 [dependencies]
+base64 = "0.23.1"
+crossterm = "0.29"
+flate2 = "1.1.10"
 
 [profile.release]
 lto = true
