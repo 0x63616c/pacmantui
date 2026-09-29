@@ -1,0 +1,20 @@
+#!/bin/sh
+# Reject commits whose STAGED Rust files are not rustfmt-clean (mirrors CI's
+# `cargo fmt --check`). Checks staged content only, so unrelated in-progress
+# working-tree changes never block a commit.
+# Escape hatch (emergencies only): PACMANTUI_SKIP_CHECKS=1 git commit ...
+
+[ "$PACMANTUI_SKIP_CHECKS" = "1" ] && exit 0
+
+files=$(git diff --cached --name-only --diff-filter=ACM | grep '\.rs$')
+[ -z "$files" ] && exit 0
+
+fail=0
+for f in $files; do
+    if ! git show ":$f" | rustfmt --edition 2024 --check >/dev/null 2>&1; then
+        echo "pre-commit: staged content of $f is not rustfmt-clean" >&2
+        echo "  fix: rustfmt --edition 2024 $f && git add $f" >&2
+        fail=1
+    fi
+done
+exit $fail

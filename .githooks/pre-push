@@ -1,0 +1,36 @@
+#!/bin/sh
+# Run the CI checks (fmt, clippy -D warnings, tests) against each pushed
+# commit in a clean temporary worktree, so the state of the working tree
+# (e.g. in-flight agent edits) neither causes nor masks failures.
+# The release build is left to CI for speed. A shared CARGO_TARGET_DIR keeps
+# repeat runs fast.
+# Escape hatch (emergencies only): PACMANTUI_SKIP_CHECKS=1 git push ...
+
+[ "$PACMANTUI_SKIP_CHECKS" = "1" ] && exit 0
+
+zero=0000000000000000000000000000000000000000
+status=0
+
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+    [ "$local_sha" = "$zero" ] && continue
+    dir=$(mktemp -d "${TMPDIR:-/tmp}/pacmantui-prepush.XXXXXX") || exit 1
+    if ! git worktree add --detach "$dir" "$local_sha" >/dev/null 2>&1; then
+        echo "pre-push: could not create worktree for $local_sha" >&2
+        rmdir "$dir" 2>/dev/null
+        exit 1
+    fi
+    (
+        cd "$dir" || exit 1
+        export CARGO_TARGET_DIR="${TMPDIR:-/tmp}/pacmantui-hook-target"
+        cargo fmt --check \
+            && cargo clippy --all-targets --all-features --quiet -- -D warnings \
+            && cargo test --all-targets --all-features --quiet
+    )
+    status=$?
+    git worktree remove --force "$dir" >/dev/null 2>&1
+    if [ $status -ne 0 ]; then
+        echo "pre-push: CI-equivalent checks failed for $(git rev-parse --short "$local_sha")" >&2
+        exit $status
+    fi
+done
+exit 0
