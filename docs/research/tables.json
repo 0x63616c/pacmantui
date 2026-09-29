@@ -1,0 +1,170 @@
+{
+  "meta": {
+    "source": "The Pac-Man Dossier, Jamey Pittman",
+    "html_mirror": "https://pacman.holenet.info/ (version 1.0.27, 2015-08-11; authoritative where sources differ)",
+    "pdf": "tralvex.com mirror 'The Pac-Man Dossier.pdf' (printout of home.comcast.net page, print-dated 2015-01-04)",
+    "verification": "Every cell cross-checked between HTML table markup and PDF page images (PDF pages 11-14 and 38-39). No data conflicts found. PDF right margin physically clips A.1's last two columns (Fright. Time, # of Flashes) and part of the A.2 prose; those come from the HTML only.",
+    "null_convention": "null = the source prints an en dash '–' meaning 'does not apply' (no frightened mode on that level, or level eliminated in hard difficulty). No cell was unreadable; no value is invented."
+  },
+  "table_a1": {
+    "title": "Table A.1 — Level Specifications (100% speed = 75.75757625 pixels/sec)",
+    "source": {
+      "section": "Appendix A: Reference Tables",
+      "html_anchor": "#LvlSpecs",
+      "pdf_page": 38,
+      "pdf_printed_page": "40 of 48",
+      "note": "The parenthetical '(100% speed = 75.75757625 pixels/sec)' in the title appears only in the HTML mirror (newer revision); the PDF printout title omits it."
+    },
+    "columns": [
+      "level",
+      "bonus_symbol",
+      "bonus_points",
+      "pacman_speed_pct",
+      "pacman_dots_speed_pct",
+      "ghost_speed_pct",
+      "ghost_tunnel_speed_pct",
+      "elroy1_dots_left",
+      "elroy1_speed_pct",
+      "elroy2_dots_left",
+      "elroy2_speed_pct",
+      "fright_pacman_speed_pct",
+      "fright_pacman_dots_speed_pct",
+      "fright_ghost_speed_pct",
+      "fright_time_seconds",
+      "fright_flashes"
+    ],
+    "unit_notes": {
+      "level": "Level number; the '21+' row applies to level 21 and every level after (parameters never change again).",
+      "bonus_points": "Points awarded for eating the bonus symbol.",
+      "*_speed_pct": "Percent of full speed, where 100% = 75.75757625 pixels/sec (per the HTML table title). Values above 100% occur (Elroy 2 = 105% on levels 5+).",
+      "pacman_dots_speed_pct": "Every value in this column is prefixed '~' (approximate) in the source: effective average speed while eating dots (Pac-Man halts 1 frame per dot).",
+      "fright_pacman_dots_speed_pct": "Every value in this column is prefixed '~' (approximate) in the source.",
+      "elroy1_dots_left": "Dots remaining in the maze at which Blinky enters Cruise Elroy stage 1 (dots).",
+      "elroy2_dots_left": "Dots remaining at which Blinky enters Cruise Elroy stage 2 (dots).",
+      "fright_time_seconds": "Frightened-mode duration in seconds. null (source '–') = ghosts never turn blue on this level; energizers still force a reversal.",
+      "fright_flashes": "Number of white flashes before frightened mode ends. null (source '–') = no frightened mode."
+    },
+    "rows": [
+      {"level": 1, "levels": "1", "bonus_symbol": "Cherries", "bonus_points": 100, "pacman_speed_pct": 80, "pacman_dots_speed_pct": 71, "ghost_speed_pct": 75, "ghost_tunnel_speed_pct": 40, "elroy1_dots_left": 20, "elroy1_speed_pct": 80, "elroy2_dots_left": 10, "elroy2_speed_pct": 85, "fright_pacman_speed_pct": 90, "fright_pacman_dots_speed_pct": 79, "fright_ghost_speed_pct": 50, "fright_time_seconds": 6, "fright_flashes": 5},
+      {"level": 2, "levels": "2", "bonus_symbol": "Strawberry", "bonus_points": 300, "pacman_speed_pct": 90, "pacman_dots_speed_pct": 79, "ghost_speed_pct": 85, "ghost_tunnel_speed_pct": 45, "elroy1_dots_left": 30, "elroy1_speed_pct": 90, "elroy2_dots_left": 15, "elroy2_speed_pct": 95, "fright_pacman_speed_pct": 95, "fright_pacman_dots_speed_pct": 83, "fright_ghost_speed_pct": 55, "fright_time_seconds": 5, "fright_flashes": 5},
+      {"level": 3, "levels": "3", "bonus_symbol": "Peach", "bonus_points": 500, "pacman_speed_pct": 90, "pacman_dots_speed_pct": 79, "ghost_speed_pct": 85, "ghost_tunnel_speed_pct": 45, "elroy1_dots_left": 40, "elroy1_speed_pct": 90, "elroy2_dots_left": 20, "elroy2_speed_pct": 95, "fright_pacman_speed_pct": 95, "fright_pacman_dots_speed_pct": 83, "fright_ghost_speed_pct": 55, "fright_time_seconds": 4, "fright_flashes": 5},
+      {"level": 4, "levels": "4", "bonus_symbol": "Peach", "bonus_points": 500, "pacman_speed_pct": 90, "pacman_dots_speed_pct": 79, "ghost_speed_pct": 85, "ghost_tunnel_speed_pct": 45, "elroy1_dots_left": 40, "elroy1_speed_pct": 90, "elroy2_dots_left": 20, "elroy2_speed_pct": 95, "fright_pacman_speed_pct": 95, "fright_pacman_dots_speed_pct": 83, "fright_ghost_speed_pct": 55, "fright_time_seconds": 3, "fright_flashes": 5},
+      {"level": 5, "levels": "5", "bonus_symbol": "Apple", "bonus_points": 700, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 40, "elroy1_speed_pct": 100, "elroy2_dots_left": 20, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": 100, "fright_pacman_dots_speed_pct": 87, "fright_ghost_speed_pct": 60, "fright_time_seconds": 2, "fright_flashes": 5},
+      {"level": 6, "levels": "6", "bonus_symbol": "Apple", "bonus_points": 700, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 50, "elroy1_speed_pct": 100, "elroy2_dots_left": 25, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": 100, "fright_pacman_dots_speed_pct": 87, "fright_ghost_speed_pct": 60, "fright_time_seconds": 5, "fright_flashes": 5},
+      {"level": 7, "levels": "7", "bonus_symbol": "Grapes", "bonus_points": 1000, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 50, "elroy1_speed_pct": 100, "elroy2_dots_left": 25, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": 100, "fright_pacman_dots_speed_pct": 87, "fright_ghost_speed_pct": 60, "fright_time_seconds": 2, "fright_flashes": 5},
+      {"level": 8, "levels": "8", "bonus_symbol": "Grapes", "bonus_points": 1000, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 50, "elroy1_speed_pct": 100, "elroy2_dots_left": 25, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": 100, "fright_pacman_dots_speed_pct": 87, "fright_ghost_speed_pct": 60, "fright_time_seconds": 2, "fright_flashes": 5},
+      {"level": 9, "levels": "9", "bonus_symbol": "Galaxian", "bonus_points": 2000, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 60, "elroy1_speed_pct": 100, "elroy2_dots_left": 30, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": 100, "fright_pacman_dots_speed_pct": 87, "fright_ghost_speed_pct": 60, "fright_time_seconds": 1, "fright_flashes": 3},
+      {"level": 10, "levels": "10", "bonus_symbol": "Galaxian", "bonus_points": 2000, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 60, "elroy1_speed_pct": 100, "elroy2_dots_left": 30, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": 100, "fright_pacman_dots_speed_pct": 87, "fright_ghost_speed_pct": 60, "fright_time_seconds": 5, "fright_flashes": 5},
+      {"level": 11, "levels": "11", "bonus_symbol": "Bell", "bonus_points": 3000, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 60, "elroy1_speed_pct": 100, "elroy2_dots_left": 30, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": 100, "fright_pacman_dots_speed_pct": 87, "fright_ghost_speed_pct": 60, "fright_time_seconds": 2, "fright_flashes": 5},
+      {"level": 12, "levels": "12", "bonus_symbol": "Bell", "bonus_points": 3000, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 80, "elroy1_speed_pct": 100, "elroy2_dots_left": 40, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": 100, "fright_pacman_dots_speed_pct": 87, "fright_ghost_speed_pct": 60, "fright_time_seconds": 1, "fright_flashes": 3},
+      {"level": 13, "levels": "13", "bonus_symbol": "Key", "bonus_points": 5000, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 80, "elroy1_speed_pct": 100, "elroy2_dots_left": 40, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": 100, "fright_pacman_dots_speed_pct": 87, "fright_ghost_speed_pct": 60, "fright_time_seconds": 1, "fright_flashes": 3},
+      {"level": 14, "levels": "14", "bonus_symbol": "Key", "bonus_points": 5000, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 80, "elroy1_speed_pct": 100, "elroy2_dots_left": 40, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": 100, "fright_pacman_dots_speed_pct": 87, "fright_ghost_speed_pct": 60, "fright_time_seconds": 3, "fright_flashes": 5},
+      {"level": 15, "levels": "15", "bonus_symbol": "Key", "bonus_points": 5000, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 100, "elroy1_speed_pct": 100, "elroy2_dots_left": 50, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": 100, "fright_pacman_dots_speed_pct": 87, "fright_ghost_speed_pct": 60, "fright_time_seconds": 1, "fright_flashes": 3},
+      {"level": 16, "levels": "16", "bonus_symbol": "Key", "bonus_points": 5000, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 100, "elroy1_speed_pct": 100, "elroy2_dots_left": 50, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": 100, "fright_pacman_dots_speed_pct": 87, "fright_ghost_speed_pct": 60, "fright_time_seconds": 1, "fright_flashes": 3},
+      {"level": 17, "levels": "17", "bonus_symbol": "Key", "bonus_points": 5000, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 100, "elroy1_speed_pct": 100, "elroy2_dots_left": 50, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": null, "fright_pacman_dots_speed_pct": null, "fright_ghost_speed_pct": null, "fright_time_seconds": null, "fright_flashes": null},
+      {"level": 18, "levels": "18", "bonus_symbol": "Key", "bonus_points": 5000, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 100, "elroy1_speed_pct": 100, "elroy2_dots_left": 50, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": 100, "fright_pacman_dots_speed_pct": 87, "fright_ghost_speed_pct": 60, "fright_time_seconds": 1, "fright_flashes": 3},
+      {"level": 19, "levels": "19", "bonus_symbol": "Key", "bonus_points": 5000, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 120, "elroy1_speed_pct": 100, "elroy2_dots_left": 60, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": null, "fright_pacman_dots_speed_pct": null, "fright_ghost_speed_pct": null, "fright_time_seconds": null, "fright_flashes": null},
+      {"level": 20, "levels": "20", "bonus_symbol": "Key", "bonus_points": 5000, "pacman_speed_pct": 100, "pacman_dots_speed_pct": 87, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 120, "elroy1_speed_pct": 100, "elroy2_dots_left": 60, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": null, "fright_pacman_dots_speed_pct": null, "fright_ghost_speed_pct": null, "fright_time_seconds": null, "fright_flashes": null},
+      {"level": null, "levels": "21+", "bonus_symbol": "Key", "bonus_points": 5000, "pacman_speed_pct": 90, "pacman_dots_speed_pct": 79, "ghost_speed_pct": 95, "ghost_tunnel_speed_pct": 50, "elroy1_dots_left": 120, "elroy1_speed_pct": 100, "elroy2_dots_left": 60, "elroy2_speed_pct": 105, "fright_pacman_speed_pct": null, "fright_pacman_dots_speed_pct": null, "fright_ghost_speed_pct": null, "fright_time_seconds": null, "fright_flashes": null}
+    ]
+  },
+  "table_a2": {
+    "title": "Table A.2 — Difficulty Specifications",
+    "source": {
+      "section": "Appendix A: Reference Tables",
+      "html_anchor": "#DiffSpecs",
+      "pdf_page": 39,
+      "pdf_printed_page": "41 of 48"
+    },
+    "columns": ["normal_level", "normal_bonus", "hard_level", "hard_bonus"],
+    "unit_notes": {
+      "normal_level": "Level number in normal difficulty (the gameplay level, i.e. the Table A.1 row in effect).",
+      "hard_level": "Level number in hard difficulty (PCB solder-pad jumper). null (source '–') = level eliminated from play in hard difficulty (levels 1, 3, 6, 19, 20).",
+      "normal_bonus": "Bonus symbol displayed; the trailing ordinal (e.g. 'Key 3') is the Nth appearance of that symbol in the sequence.",
+      "hard_bonus": "Bonus symbol displayed in hard difficulty. The symbol sequence is not skipped, so it lags the gameplay level; bonus point values follow the displayed symbol.",
+      "prose_summary": "Hard difficulty (solder jumper on the PCB) eliminates only levels 1, 3, 6, 19, 20 from play; bonus symbols are not eliminated, so hard's first board is level-2 gameplay showing cherries. Difficulty can be identified in attract mode: Inky captures Pac-Man lower-left in normal; Clyde does (near the same spot) in hard."
+    },
+    "rows": [
+      {"normal_level": 1, "normal_levels": "1", "normal_bonus": "Cherries", "hard_level": null, "hard_levels": null, "hard_bonus": null},
+      {"normal_level": 2, "normal_levels": "2", "normal_bonus": "Strawberry", "hard_level": 2, "hard_levels": "2", "hard_bonus": "Cherries"},
+      {"normal_level": 3, "normal_levels": "3", "normal_bonus": "Peach 1", "hard_level": null, "hard_levels": null, "hard_bonus": null},
+      {"normal_level": 4, "normal_levels": "4", "normal_bonus": "Peach 2", "hard_level": 4, "hard_levels": "4", "hard_bonus": "Strawberry"},
+      {"normal_level": 5, "normal_levels": "5", "normal_bonus": "Apple 1", "hard_level": 5, "hard_levels": "5", "hard_bonus": "Peach 1"},
+      {"normal_level": 6, "normal_levels": "6", "normal_bonus": "Apple 2", "hard_level": null, "hard_levels": null, "hard_bonus": null},
+      {"normal_level": 7, "normal_levels": "7", "normal_bonus": "Grapes 1", "hard_level": 7, "hard_levels": "7", "hard_bonus": "Peach 2"},
+      {"normal_level": 8, "normal_levels": "8", "normal_bonus": "Grapes 2", "hard_level": 8, "hard_levels": "8", "hard_bonus": "Apple 1"},
+      {"normal_level": 9, "normal_levels": "9", "normal_bonus": "Galaxian 1", "hard_level": 9, "hard_levels": "9", "hard_bonus": "Apple 2"},
+      {"normal_level": 10, "normal_levels": "10", "normal_bonus": "Galaxian 2", "hard_level": 10, "hard_levels": "10", "hard_bonus": "Grapes 1"},
+      {"normal_level": 11, "normal_levels": "11", "normal_bonus": "Bell 1", "hard_level": 11, "hard_levels": "11", "hard_bonus": "Grapes 2"},
+      {"normal_level": 12, "normal_levels": "12", "normal_bonus": "Bell 2", "hard_level": 12, "hard_levels": "12", "hard_bonus": "Galaxian 1"},
+      {"normal_level": 13, "normal_levels": "13", "normal_bonus": "Key 1", "hard_level": 13, "hard_levels": "13", "hard_bonus": "Galaxian 2"},
+      {"normal_level": 14, "normal_levels": "14", "normal_bonus": "Key 2", "hard_level": 14, "hard_levels": "14", "hard_bonus": "Bell 1"},
+      {"normal_level": 15, "normal_levels": "15", "normal_bonus": "Key 3", "hard_level": 15, "hard_levels": "15", "hard_bonus": "Bell 2"},
+      {"normal_level": 16, "normal_levels": "16", "normal_bonus": "Key 4", "hard_level": 16, "hard_levels": "16", "hard_bonus": "Key 1"},
+      {"normal_level": 17, "normal_levels": "17", "normal_bonus": "Key 5", "hard_level": 17, "hard_levels": "17", "hard_bonus": "Key 2"},
+      {"normal_level": 18, "normal_levels": "18", "normal_bonus": "Key 6", "hard_level": 18, "hard_levels": "18", "hard_bonus": "Key 3"},
+      {"normal_level": 19, "normal_levels": "19", "normal_bonus": "Key 7", "hard_level": null, "hard_levels": null, "hard_bonus": null},
+      {"normal_level": 20, "normal_levels": "20", "normal_bonus": "Key 8", "hard_level": null, "hard_levels": null, "hard_bonus": null},
+      {"normal_level": null, "normal_levels": "21+", "normal_bonus": "Key 9", "hard_level": null, "hard_levels": "21+", "hard_bonus": "Key 4"}
+    ]
+  },
+  "scatter_chase_schedule": {
+    "title": "Scatter/Chase mode schedule (Chapter 2, 'Scatter, Chase, Repeat...')",
+    "source": {
+      "section": "Chapter 2: The Basics / Scatter, Chase, Repeat...",
+      "html_anchor": "#CH2_Scatter_Chase_Repeat",
+      "pdf_page": 12,
+      "pdf_printed_page": "14 of 48"
+    },
+    "columns": ["phase", "mode", "level_1", "levels_2_4", "levels_5_plus"],
+    "unit_notes": {
+      "values": "Seconds ('all values are in seconds' per the source). '1/60' = one frame (a single-frame scatter that appears as a simple reversal). 'indefinite' = chase mode for the remainder of the level.",
+      "level_bands": "Three bands: level 1; levels 2-4; levels 5 and beyond.",
+      "phase": "Consecutive mode phases from level start (phase 1 begins the level).",
+      "timer_rules": "From the accompanying prose: the scatter/chase timer resets when a life is lost or a level is completed; it pauses while ghosts are frightened and resumes afterward (ghosts return to their prior mode)."
+    },
+    "rows": [
+      {"phase": 1, "mode": "scatter", "level_1": 7, "levels_2_4": 7, "levels_5_plus": 5},
+      {"phase": 2, "mode": "chase", "level_1": 20, "levels_2_4": 20, "levels_5_plus": 20},
+      {"phase": 3, "mode": "scatter", "level_1": 7, "levels_2_4": 7, "levels_5_plus": 5},
+      {"phase": 4, "mode": "chase", "level_1": 20, "levels_2_4": 20, "levels_5_plus": 20},
+      {"phase": 5, "mode": "scatter", "level_1": 5, "levels_2_4": 5, "levels_5_plus": 5},
+      {"phase": 6, "mode": "chase", "level_1": 20, "levels_2_4": 1033, "levels_5_plus": 1037},
+      {"phase": 7, "mode": "scatter", "level_1": 5, "levels_2_4": "1/60", "levels_5_plus": "1/60"},
+      {"phase": 8, "mode": "chase", "level_1": "indefinite", "levels_2_4": "indefinite", "levels_5_plus": "indefinite"}
+    ]
+  },
+  "speed_summary": {
+    "title": "Speed summary by level band (Chapter 2, 'Speed')",
+    "source": {
+      "section": "Chapter 2: The Basics / Speed",
+      "html_anchor": "#CH2_Speed",
+      "pdf_page": 14,
+      "pdf_printed_page": "16 of 48",
+      "note": "Condensation of Table A.1's speed columns into level bands; the source says this information is also contained in Table A.1. Agrees with A.1 cell-for-cell."
+    },
+    "columns": [
+      "levels",
+      "pacman_norm_pct",
+      "pacman_norm_dots_pct",
+      "pacman_fright_pct",
+      "pacman_fright_dots_pct",
+      "ghost_norm_pct",
+      "ghost_fright_pct",
+      "ghost_tunnel_pct"
+    ],
+    "unit_notes": {
+      "values": "Percent of full speed (100% = 75.75757625 pixels/sec per Table A.1's HTML title). The *_dots_pct columns are prefixed '~' (approximate) in the source: average speed while eating dots. null (source '–') = no frightened mode on levels 21+.",
+      "prose_facts": "Pac-Man halts 1 frame (1/60 s) per regular dot eaten and 3 frames per energizer; ghost tunnel travel is roughly half speed; at 21+ Pac-Man slows back to 90% permanently while ghosts stay at 95%."
+    },
+    "rows": [
+      {"levels": "1", "level_min": 1, "level_max": 1, "pacman_norm_pct": 80, "pacman_norm_dots_pct": 71, "pacman_fright_pct": 90, "pacman_fright_dots_pct": 79, "ghost_norm_pct": 75, "ghost_fright_pct": 50, "ghost_tunnel_pct": 40},
+      {"levels": "2-4", "level_min": 2, "level_max": 4, "pacman_norm_pct": 90, "pacman_norm_dots_pct": 79, "pacman_fright_pct": 95, "pacman_fright_dots_pct": 83, "ghost_norm_pct": 85, "ghost_fright_pct": 55, "ghost_tunnel_pct": 45},
+      {"levels": "5-20", "level_min": 5, "level_max": 20, "pacman_norm_pct": 100, "pacman_norm_dots_pct": 87, "pacman_fright_pct": 100, "pacman_fright_dots_pct": 87, "ghost_norm_pct": 95, "ghost_fright_pct": 60, "ghost_tunnel_pct": 50},
+      {"levels": "21+", "level_min": 21, "level_max": null, "pacman_norm_pct": 90, "pacman_norm_dots_pct": 79, "pacman_fright_pct": null, "pacman_fright_dots_pct": null, "ghost_norm_pct": 95, "ghost_fright_pct": null, "ghost_tunnel_pct": 50}
+    ]
+  },
+  "not_tabular_in_source": {
+    "note": "These gameplay values exist in the dossier only as prose, not tables, and are therefore out of scope for this transcription (covered by the mechanics research): ghost-house dot counters and exit rules (Ch. 2 'Home Sweet Home', anchor #CH2_Home_Sweet_Home); bonus fruit appearance triggers and display duration (Ch. 1 prose); ghost-eating and other point values (Ch. 1 prose)."
+  }
+}
