@@ -354,3 +354,35 @@ fn progression_fruit_history_extra_life_and_level_17() {
     let _ = TilePos::new(0, 0);
     let _: Option<Game> = None;
 }
+
+/// Regression (found in live play, 2026-09-29): after the third life is
+/// lost the sequence freezes on the death animation's final frame, and the
+/// app stops ticking — pac_visible must go false at game over or the death
+/// "pop" remnant stays on screen ("no actors" on GAME OVER, supplements §3).
+#[test]
+fn game_over_hides_all_actors() {
+    let src = h::pass_map(0, "1.0", "#_.._______#");
+    let mut g = h::game_on(&src, 1);
+    h::run_to_playing(&mut g);
+    let mut game_over_at = None;
+    for t in 1..=5000u32 {
+        let ev = g.tick(h::hold(Dir::Right));
+        if ev.iter().any(|e| matches!(e, Event::GameOver)) {
+            game_over_at = Some(t);
+            break;
+        }
+    }
+    assert!(
+        game_over_at.is_some(),
+        "three unattended deaths end the game"
+    );
+    assert!(g.is_game_over());
+    let rs = g.render_state();
+    assert!(!rs.pac_visible, "no death-anim remnant on GAME OVER");
+    assert!(rs.ghosts.iter().all(|gr| !gr.visible), "no ghosts either");
+    assert_eq!(rs.lives, 0);
+    // The snapshot stays actor-free even if the sim keeps getting ticked.
+    g.tick(InputFrame::default());
+    let rs = g.render_state();
+    assert!(!rs.pac_visible && rs.ghosts.iter().all(|gr| !gr.visible));
+}

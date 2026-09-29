@@ -344,6 +344,7 @@ impl Game {
         let first_ready_hidden = matches!(self.sequence, Sequence::Ready { tick }
             if self.first_start && tick < timings::READY_FIRST_NO_ACTORS_TICKS);
         let ghosts_hidden = first_ready_hidden
+            || self.game_over
             || match self.sequence {
                 // Ghosts vanish when the death animation proper starts
                 // (supplements §3) and at the first level-clear flash
@@ -352,10 +353,13 @@ impl Game {
                 Sequence::LevelFlash { tick } => tick >= timings::LEVEL_CLEAR_FREEZE_TICKS,
                 _ => false,
             };
-        // Pac-Man hidden only during the first-start "no actors" READY phase
-        // and while a GhostScoreFreeze popup replaces him (supplements §4/§1).
-        let pac_visible =
-            !first_ready_hidden && !matches!(self.sequence, Sequence::GhostScoreFreeze { .. });
+        // Pac-Man hidden only during the first-start "no actors" READY phase,
+        // while a GhostScoreFreeze popup replaces him (supplements §4/§1),
+        // and at game over (the sequence freezes on the death animation's
+        // last frame, which would otherwise leave the "pop" remnant drawn).
+        let pac_visible = !first_ready_hidden
+            && !self.game_over
+            && !matches!(self.sequence, Sequence::GhostScoreFreeze { .. });
         let ghost_anim = ((self.anim_tick / timings::GHOST_ANIM_HALF_TICKS) % 2) as u8;
         let ghosts = [0usize, 1, 2, 3].map(|i| {
             let g = &self.ghosts[i];
