@@ -10,7 +10,7 @@
 //! unexpected mismatch is a rendering regression.
 
 use pacmantui::map::Map;
-use pacmantui::render::test_api::*;
+use pacmantui::render::compose::{Compositor, Frame, Overlay, TileKind, cell_kind};
 use pacmantui::render::{LoadingScreen, MenuItem, MenuScreen};
 use pacmantui::sim::timings;
 use pacmantui::types::{
@@ -88,68 +88,48 @@ fn rich_state(m: &Map) -> RenderState {
     }
 }
 
-/// Compose one gameplay frame exactly as `Renderer::render_game` does.
+/// Compose one gameplay frame through the compositor's public interface —
+/// the same seam `Renderer::render_game` adapts to the tty.
 fn game_frame(m: &Map, st: &RenderState, paused: bool, game_over: bool) -> Frame {
-    let (tw, th) = (m.width(), m.height());
-    let kind = |x: i32, y: i32| cell_kind(m, x, y);
-    let lay = FrameLayout::of_map(m);
-    let white = matches!(st.sequence, Sequence::LevelFlash { tick } if flash_is_white(tick));
-    let layer = compose_maze_layer(tw, th, &kind, white);
-    let (w, h) = lay.frame_px();
-    let mut fb = Frame::new(w, h);
-    let view = GameView {
-        layer: &layer,
-        layout: lay,
-        state: st,
-        fruit_px: (m.fruit_pos().x.px(), m.fruit_pos().y.px()),
-        paused,
-        game_over,
-    };
-    draw_game(&mut fb, &view, kind);
-    fb
+    let mut c = Compositor::new();
+    c.game(m, st, Overlay { paused, game_over }).clone()
 }
 
 fn menu_frame() -> Frame {
-    let mut fb = Frame::new(MENU_W, MENU_H);
-    compose_menu(
-        &mut fb,
-        &MenuScreen {
-            title: "PACMANTUI".into(),
-            items: vec![
-                MenuItem {
-                    label: "PLAY".into(),
-                    value: None,
-                    enabled: true,
-                },
-                MenuItem {
-                    label: "DIFFICULTY".into(),
-                    value: Some("NORMAL".into()),
-                    enabled: true,
-                },
-                MenuItem {
-                    label: "QUIT".into(),
-                    value: None,
-                    enabled: false,
-                },
-            ],
-            selected: 1,
-            footer: "ARROWS MOVE - ENTER SELECTS".into(),
-            decorated: true,
-        },
-    );
-    fb
+    let mut c = Compositor::new();
+    c.menu(&MenuScreen {
+        title: "PACMANTUI".into(),
+        items: vec![
+            MenuItem {
+                label: "PLAY".into(),
+                value: None,
+                enabled: true,
+            },
+            MenuItem {
+                label: "DIFFICULTY".into(),
+                value: Some("NORMAL".into()),
+                enabled: true,
+            },
+            MenuItem {
+                label: "QUIT".into(),
+                value: None,
+                enabled: false,
+            },
+        ],
+        selected: 1,
+        footer: "ARROWS MOVE - ENTER SELECTS".into(),
+        decorated: true,
+    })
+    .clone()
 }
 
 fn loading_frame() -> Frame {
-    let mut fb = Frame::new(MENU_W, MENU_H);
-    compose_loading(
-        &mut fb,
-        &LoadingScreen {
-            message: "LOADING MAPS".into(),
-            progress: 0.42,
-        },
-    );
-    fb
+    let mut c = Compositor::new();
+    c.loading(&LoadingScreen {
+        message: "LOADING MAPS".into(),
+        progress: 0.42,
+    })
+    .clone()
 }
 
 /// Every hashed (map, scene) pair, in a fixed order.

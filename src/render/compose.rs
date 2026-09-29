@@ -1,12 +1,18 @@
-//! Scene composition: auto-tiled maze layer, gameplay frame, HUD, menu and
-//! loading screens. All functions here compose into the CPU framebuffer and
-//! are pure (no terminal I/O), so they are unit-testable without a tty.
+//! The pure-CPU compositor: the render layer's deep module and its test
+//! surface. Given map-derived tile info (the [`Maze`] seam), a
+//! [`RenderState`], overlay flags and the menu/loading screen data, the
+//! [`Compositor`] produces the finished [`Frame`] of pixels — auto-tiled maze
+//! layer, gameplay frame, HUD, overlays, menu and loading screens — with no
+//! terminal I/O anywhere. Two adapters sit on its interface: the kitty tty
+//! `Renderer` in prod (which letterboxes and transmits the composed frame)
+//! and in-memory frames in tests. Everything below the `Compositor` methods
+//! (scene draw functions, sprites, font, framebuffer primitives) is
+//! implementation: depth behind a three-method interface.
 //!
 //! Visual layout facts (28x36 tiles, HUD rows, colors, sprite metrics) per
 //! docs/research/dossier-mechanics.md.
 
 use super::font;
-use super::framebuffer::Frame;
 use super::layout::FrameLayout;
 use super::sprites;
 use super::{LoadingScreen, MenuScreen};
@@ -14,9 +20,136 @@ use crate::map::{Cell, Map};
 use crate::sim::timings;
 use crate::types::{Dir, GhostId, GhostState, RenderState, Sequence, TilePos};
 
+pub use super::framebuffer::Frame;
+
 /// Fixed logical resolution for menu/loading scenes (classic screen size).
-pub const MENU_W: usize = 224;
-pub const MENU_H: usize = 288;
+pub(crate) const MENU_W: usize = 224;
+pub(crate) const MENU_H: usize = 288;
+
+/// Map-derived tile info the compositor composes from. This is the seam that
+/// keeps `Map` out of the pure render path; two adapters satisfy it: the real
+/// [`Map`] (prod) and synthetic closure grids (tests).
+///
+/// Invariant: `id` must uniquely identify the grid content — it keys the
+/// compositor's cached static maze layer.
+pub trait Maze {
+    /// Stable id for the maze-layer cache.
+    fn id(&self) -> &str;
+    /// Grid size in tiles `(tw, th)`.
+    fn size(&self) -> (i32, i32);
+    /// Cell kind at a tile (out-of-range tiles count as `Open`, like `Map`).
+    fn kind(&self, x: i32, y: i32) -> TileKind;
+    /// Fruit-spawn pixel center (map coords): anchors fruit and the
+    /// READY!/GAME OVER/PAUSED overlays.
+    fn fruit_px(&self) -> (i32, i32);
+}
+
+impl Maze for Map {
+    fn id(&self) -> &str {
+        Map::id(self)
+    }
+    fn size(&self) -> (i32, i32) {
+        (self.width(), self.height())
+    }
+    fn kind(&self, x: i32, y: i32) -> TileKind {
+        cell_kind(self, x, y)
+    }
+    fn fruit_px(&self) -> (i32, i32) {
+        let p = self.fruit_pos();
+        (p.x.px(), p.y.px())
+    }
+}
+
+/// App-owned overlay flags composed over a gameplay frame (pause state and
+/// game-over live outside `RenderState`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Overlay {
+    pub paused: bool,
+    pub game_over: bool,
+}
+
+/// The pure-CPU compositor. Owns the composed [`Frame`] and the cached
+/// static maze layers (blue + white-flash variants, keyed by [`Maze::id`]);
+/// each method composes one scene and returns the finished frame. Frame
+/// geometry comes from [`FrameLayout`], the owner of the map-grid→frame
+/// mapping.
+#[derive(Debug)]
+pub struct Compositor {
+    fb: Frame,
+    maze_key: Option<String>,
+    maze_blue: Vec<u8>,
+    maze_white: Vec<u8>,
+}
+
+impl Default for Compositor {
+    fn default() -> Compositor {
+        Compositor::new()
+    }
+}
+
+impl Compositor {
+    pub fn new() -> Compositor {
+        Compositor {
+            fb: Frame::new(0, 0),
+            maze_key: None,
+            maze_blue: Vec::new(),
+            maze_white: Vec::new(),
+        }
+    }
+
+    /// Compose one gameplay frame: cached maze layer (white variant during
+    /// the level-flash white phase), pellets, fruit, actors, score popups,
+    /// HUD, and the READY!/GAME OVER/PAUSED overlays.
+    pub fn game(&mut self, maze: &dyn Maze, state: &RenderState, overlay: Overlay) -> &Frame {
+        let (tw, th) = maze.size();
+        let kind_at = |x: i32, y: i32| maze.kind(x, y);
+        let lay = FrameLayout::new(tw, th, &kind_at);
+        let (w, h) = lay.frame_px();
+        if (self.fb.width(), self.fb.height()) != (w, h) {
+            self.fb.resize(w, h);
+        }
+        if self.maze_key.as_deref() != Some(maze.id()) {
+            self.maze_blue = compose_maze_layer(tw, th, &kind_at, false);
+            self.maze_white = compose_maze_layer(tw, th, &kind_at, true);
+            self.maze_key = Some(maze.id().to_string());
+        }
+        let white = matches!(state.sequence, Sequence::LevelFlash { tick }
+            if flash_is_white(tick));
+        let layer = if white {
+            &self.maze_white
+        } else {
+            &self.maze_blue
+        };
+        let view = GameView {
+            layer,
+            layout: lay,
+            state,
+            fruit_px: maze.fruit_px(),
+            paused: overlay.paused,
+            game_over: overlay.game_over,
+        };
+        draw_game(&mut self.fb, &view, kind_at);
+        &self.fb
+    }
+
+    /// Compose the menu screen at the fixed classic resolution.
+    pub fn menu(&mut self, screen: &MenuScreen) -> &Frame {
+        if (self.fb.width(), self.fb.height()) != (MENU_W, MENU_H) {
+            self.fb.resize(MENU_W, MENU_H);
+        }
+        compose_menu(&mut self.fb, screen);
+        &self.fb
+    }
+
+    /// Compose the loading screen at the fixed classic resolution.
+    pub fn loading(&mut self, screen: &LoadingScreen) -> &Frame {
+        if (self.fb.width(), self.fb.height()) != (MENU_W, MENU_H) {
+            self.fb.resize(MENU_W, MENU_H);
+        }
+        compose_loading(&mut self.fb, screen);
+        &self.fb
+    }
+}
 
 const WHITE: [u8; 3] = [255, 255, 255];
 const GRAY: [u8; 3] = [120, 120, 120];
@@ -61,7 +194,7 @@ pub fn cell_kind(map: &Map, x: i32, y: i32) -> TileKind {
 /// adjacency into classic-look thin blue contour lines with rounded corners
 /// (white variant for the level flash). Dead-space padding (e.g. HUD rows)
 /// outside the maze bounding box is left black.
-pub fn compose_maze_layer(
+fn compose_maze_layer(
     tw: i32,
     th: i32,
     kind_at: &dyn Fn(i32, i32) -> TileKind,
@@ -217,7 +350,7 @@ fn draw_wall_tile(
 
 /// Level-flash phase from the LevelFlash tick: after the freeze, alternate
 /// white/blue per half-period for the configured number of flashes.
-pub fn flash_is_white(tick: u32) -> bool {
+fn flash_is_white(tick: u32) -> bool {
     if tick < timings::LEVEL_CLEAR_FREEZE_TICKS {
         return false;
     }
@@ -228,24 +361,24 @@ pub fn flash_is_white(tick: u32) -> bool {
 // --- gameplay frame ----------------------------------------------------------
 
 /// Everything `draw_game` needs besides the map-cell closure.
-pub struct GameView<'a> {
+struct GameView<'a> {
     /// Cached static maze layer (exactly tw*8 x th*8 RGB, map-sized).
-    pub layer: &'a [u8],
+    layer: &'a [u8],
     /// The frame geometry: owns the map-grid→frame mapping (padding rows,
     /// maze band origin, HUD anchors) so no draw site does pad arithmetic.
-    pub layout: FrameLayout,
-    pub state: &'a RenderState,
+    layout: FrameLayout,
+    state: &'a RenderState,
     /// Fruit/overlay anchor: pixel center of the fruit spawn (map coords).
-    pub fruit_px: (i32, i32),
-    pub paused: bool,
-    pub game_over: bool,
+    fruit_px: (i32, i32),
+    paused: bool,
+    game_over: bool,
 }
 
 /// Compose one full gameplay frame over the cached maze layer. The frame may
 /// be taller than the map (HUD padding rows, all black): the maze layer and
 /// every maze-anchored element draw through `view.layout`'s mapping queries,
 /// while the HUD anchors to the frame's own top/bottom rows.
-pub fn draw_game(fb: &mut Frame, view: &GameView, kind_at: impl Fn(i32, i32) -> TileKind) {
+fn draw_game(fb: &mut Frame, view: &GameView, kind_at: impl Fn(i32, i32) -> TileKind) {
     let st = view.state;
     let lay = &view.layout;
     let (tw, th) = lay.map_tiles();
@@ -419,7 +552,7 @@ fn draw_text_centered(fb: &mut Frame, cx: i32, y: i32, text: &str, rgb: [u8; 3])
 /// [`FrameLayout`], which frames them in FRAME tiles (map plus any HUD
 /// padding rows), never map tiles. Arcade conventions: score right-aligned
 /// ending at col 6, display rolls at 999,999.
-pub fn draw_hud(fb: &mut Frame, st: &RenderState, lay: &FrameLayout) {
+fn draw_hud(fb: &mut Frame, st: &RenderState, lay: &FrameLayout) {
     let (tw, _) = lay.frame_tiles();
     let (y_labels, y_scores) = lay.hud_text_rows_px();
     font::draw_text(fb, 3 * 8, y_labels, "1UP", WHITE);
@@ -472,7 +605,7 @@ pub fn draw_hud(fb: &mut Frame, st: &RenderState, lay: &FrameLayout) {
 /// Pixel-rendered menu: bitmap-font title (2x), optional decorative sprite
 /// parade, item list with selected-item highlight, right-aligned value
 /// column, footer. Letterboxed on black by the shared framebuffer path.
-pub fn compose_menu(fb: &mut Frame, screen: &MenuScreen) {
+fn compose_menu(fb: &mut Frame, screen: &MenuScreen) {
     fb.clear();
     let w = fb.width() as i32;
 
@@ -526,7 +659,7 @@ pub fn compose_menu(fb: &mut Frame, screen: &MenuScreen) {
 }
 
 /// Pixel-rendered loading screen: message + bordered progress bar + percent.
-pub fn compose_loading(fb: &mut Frame, screen: &LoadingScreen) {
+fn compose_loading(fb: &mut Frame, screen: &LoadingScreen) {
     fb.clear();
     let w = fb.width() as i32;
     draw_text_centered(fb, w / 2, 120, &screen.message, WHITE);

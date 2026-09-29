@@ -8,7 +8,8 @@
 //! must stay pixel-identical.
 
 use pacmantui::map::{Cell, Map};
-use pacmantui::render::test_api::*;
+use pacmantui::render::compose::{Compositor, Frame, Overlay, TileKind};
+use pacmantui::render::layout::FrameLayout;
 use pacmantui::types::{
     Dir, GhostId, GhostRender, GhostState, PxPos, RenderState, Sequence, TilePos,
 };
@@ -18,6 +19,7 @@ const WHITE_RGB: [u8; 3] = [255, 255, 255];
 const YELLOW_RGB: [u8; 3] = [255, 255, 0];
 const RED_RGB: [u8; 3] = [255, 0, 0];
 const MAZE_BLUE_RGB: [u8; 3] = [33, 33, 222];
+const DOOR_PINK_RGB: [u8; 3] = [255, 184, 222];
 const PEACH_RGB: [u8; 3] = [255, 184, 174];
 
 fn ghost(id: GhostId, tile: (i32, i32), visible: bool) -> GhostRender {
@@ -60,32 +62,27 @@ fn bare_state(m: &Map) -> RenderState {
     }
 }
 
-/// Compose a full gameplay frame the way `Renderer::render_game` does.
+/// Compose a full gameplay frame through the compositor's public interface
+/// (the seam `Renderer::render_game` adapts to the tty).
 fn compose_frame(m: &Map, st: &RenderState) -> Frame {
     compose_frame_with(m, st, false, false)
 }
 
 fn compose_frame_with(m: &Map, st: &RenderState, paused: bool, game_over: bool) -> Frame {
-    let (tw, th) = (m.width(), m.height());
-    let kind = |x: i32, y: i32| cell_kind(m, x, y);
-    let lay = FrameLayout::of_map(m);
-    let layer = compose_maze_layer(tw, th, &kind, false);
-    let (w, h) = lay.frame_px();
-    let mut fb = Frame::new(w, h);
-    let view = GameView {
-        layer: &layer,
-        layout: lay,
-        state: st,
-        fruit_px: (m.fruit_pos().x.px(), m.fruit_pos().y.px()),
-        paused,
-        game_over,
-    };
-    draw_game(&mut fb, &view, kind);
-    fb
+    let mut c = Compositor::new();
+    c.game(m, st, Overlay { paused, game_over }).clone()
 }
 
-fn rows(fb: &Frame, y0: usize, y1: usize) -> &[u8] {
-    &fb.data()[y0 * fb.width() * 3..y1 * fb.width() * 3]
+/// The maze band may hold only maze-layer pixels (wall contours, door bar,
+/// black): with a bare state, any other color there means the HUD (or an
+/// overlay) touched the maze.
+fn assert_maze_band_pure(fb: &Frame, y0: i32, y1: i32) {
+    for (x, y, px) in pixels(fb, y0, y1) {
+        assert!(
+            px == BLACK || px == MAZE_BLUE_RGB || px == DOOR_PINK_RGB,
+            "non-maze pixel {px:?} at ({x},{y}) inside the maze band"
+        );
+    }
 }
 
 fn pixels(fb: &Frame, y0: i32, y1: i32) -> impl Iterator<Item = (i32, i32, [u8; 3])> + '_ {
@@ -141,7 +138,6 @@ fn frame_layout_pads_from_open_bounding_box() {
 #[test]
 fn classic_map_needs_no_padding() {
     let m = Map::classic();
-    let kind = |x: i32, y: i32| cell_kind(&m, x, y);
     let lay = FrameLayout::of_map(&m);
     assert_eq!(lay.frame_tiles(), lay.map_tiles());
     assert_eq!(lay.maze_origin_px(), (0, 0));
@@ -150,10 +146,9 @@ fn classic_map_needs_no_padding() {
     // Frame is exactly the 28x36 map grid: 224x288 px, as before the fix.
     assert_eq!((fb.width(), fb.height()), (224, 288));
 
-    // Maze area (border row 3 through border row 33) is exactly the layer:
-    // the HUD never touches it.
-    let layer = compose_maze_layer(m.width(), m.height(), &kind, false);
-    assert_eq!(rows(&fb, 24, 272), &layer[24 * 224 * 3..272 * 224 * 3]);
+    // Maze area (border row 3 through border row 33) holds only maze-layer
+    // pixels: the HUD never touches it.
+    assert_maze_band_pure(&fb, 24, 272);
 
     // HUD placement unchanged: "1UP" row 0, score row 8 ('1' of 1234 at
     // x=26), lives and fruit strip on tile rows 34-35 (ly=272).
@@ -169,7 +164,6 @@ fn classic_map_needs_no_padding() {
 fn custom_map_hud_gets_padded_rows() {
     let m = Map::custom();
     let (tw, th) = (m.width(), m.height());
-    let kind = |x: i32, y: i32| cell_kind(&m, x, y);
     // 32x26 all-maze grid: 3 padding rows on top, 2 on the bottom.
     let lay = FrameLayout::of_map(&m);
     assert_eq!(lay.map_tiles(), (32, 26));
@@ -178,10 +172,9 @@ fn custom_map_hud_gets_padded_rows() {
 
     let fb = compose_frame(&m, &bare_state(&m));
     // Frame is 32x31 tiles = 256x248 px; the maze band sits at tile rows
-    // 3..=28.
+    // 3..=28 and holds only maze-layer pixels.
     assert_eq!((fb.width(), fb.height()), (256, 248));
-    let layer = compose_maze_layer(tw, th, &kind, false);
-    assert_eq!(rows(&fb, 24, 232), &layer[..]);
+    assert_maze_band_pure(&fb, 24, 232);
     // Top border's outer contour line lands at tile row 3 (pixel row 26).
     assert!((0..256).any(|x| fb.get(x, 26) == MAZE_BLUE_RGB));
 

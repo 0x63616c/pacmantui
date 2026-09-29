@@ -7,18 +7,21 @@
 //!
 //! Owner: W1-RENDER agent. Public signatures are the contract; extend, don't break.
 //!
-//! Internals: everything is composed into a CPU framebuffer at the logical
-//! resolution (map tiles x 8px), integer-upscaled, and sent as ONE image per
-//! frame (transmit new id, place z=-1, delete old id, inside CSI 2026
-//! brackets — see `kitty`). Submodules `framebuffer`/`sprites`/`font`/`scenes`
-//! are pure CPU and unit-tested via [`test_api`]; `terminal`/`kitty` own the
-//! escape-code surface.
+//! Internals: the seam is [`compose`] — the pure-CPU [`compose::Compositor`]
+//! produces every finished frame of pixels at the logical resolution (map
+//! tiles x 8px) with geometry owned by [`layout::FrameLayout`], and tests
+//! exercise it through that same public interface. [`Renderer`] is the kitty
+//! tty adapter on that seam: it integer-upscales the composed frame and
+//! sends it as ONE image per frame (transmit new id, place z=-1, delete old
+//! id, inside CSI 2026 brackets — see `kitty`); `terminal`/`kitty` own the
+//! escape-code surface, unit-tested at their internal seams (injectable byte
+//! sinks and pure layout math).
 
+pub mod compose;
 mod font;
 mod framebuffer;
 mod kitty;
-mod layout;
-mod scenes;
+pub mod layout;
 mod sprites;
 mod terminal;
 
@@ -29,10 +32,9 @@ use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::{cursor, execute};
 
 use crate::map::Map;
-use crate::types::{RenderState, Sequence};
+use crate::types::RenderState;
 
 use layout::FrameLayout;
-use scenes::cell_kind;
 
 /// Double-buffered kitty image ids (arbitrary; we own the tty's id space).
 const ID_A: u32 = 42;
@@ -95,21 +97,20 @@ enum SceneKind {
     Loading,
 }
 
+/// The kitty tty adapter over [`compose::Compositor`]: composes each scene
+/// through the pure compositor, then letterboxes, integer-scales and
+/// transmits the finished frame to the terminal.
 pub struct Renderer {
     _guard: terminal::TermGuard,
     layout: terminal::Layout,
     /// Current logical (unscaled) resolution.
     logical: (usize, usize),
-    fb: framebuffer::Frame,
+    comp: compose::Compositor,
     scaled: Vec<u8>,
     out: Vec<u8>,
     /// (next transmit id, id to delete) — swapped every frame.
     ids: (u32, u32),
     scene: SceneKind,
-    /// Static maze layer cache, keyed by map id: (blue, white-flash) variants.
-    maze_key: Option<String>,
-    maze_blue: Vec<u8>,
-    maze_white: Vec<u8>,
     paused: bool,
     game_over: bool,
 }
@@ -128,20 +129,17 @@ impl Renderer {
             crossterm::terminal::EnterAlternateScreen,
             cursor::Hide
         )?;
-        let layout = terminal::compute_layout(scenes::MENU_W, scenes::MENU_H)?;
+        let layout = terminal::compute_layout(compose::MENU_W, compose::MENU_H)?;
         terminal::paint_black(&layout)?;
         Ok(Renderer {
             _guard: guard,
             layout,
-            logical: (scenes::MENU_W, scenes::MENU_H),
-            fb: framebuffer::Frame::new(scenes::MENU_W, scenes::MENU_H),
+            logical: (compose::MENU_W, compose::MENU_H),
+            comp: compose::Compositor::new(),
             scaled: Vec::new(),
             out: Vec::new(),
             ids: (ID_A, ID_B),
             scene: SceneKind::None,
-            maze_key: None,
-            maze_blue: Vec::new(),
-            maze_white: Vec::new(),
             paused: false,
             game_over: false,
         })
@@ -165,47 +163,46 @@ impl Renderer {
     /// their own dead rows (classic) the padding is zero and the frame equals
     /// the map grid.
     pub fn render_game(&mut self, map: &Map, state: &RenderState) -> io::Result<()> {
-        let (tw, th) = (map.width(), map.height());
-        let kind_at = |x: i32, y: i32| cell_kind(map, x, y);
-        let frame_layout = FrameLayout::of_map(map);
-        let (lw, lh) = frame_layout.frame_px();
+        // FrameLayout owns the frame geometry; the compositor re-derives the
+        // same layout internally (an O(tiles) scan, negligible per frame).
+        let (lw, lh) = FrameLayout::of_map(map).frame_px();
         self.ensure_scene(SceneKind::Game, lw, lh)?;
-        if self.maze_key.as_deref() != Some(map.id()) {
-            self.maze_blue = scenes::compose_maze_layer(tw, th, &kind_at, false);
-            self.maze_white = scenes::compose_maze_layer(tw, th, &kind_at, true);
-            self.maze_key = Some(map.id().to_string());
-        }
-
-        let white = matches!(state.sequence, Sequence::LevelFlash { tick }
-            if scenes::flash_is_white(tick));
-        let layer = if white {
-            &self.maze_white
-        } else {
-            &self.maze_blue
-        };
-        let fruit = map.fruit_pos();
-        let view = scenes::GameView {
-            layer,
-            layout: frame_layout,
-            state,
-            fruit_px: (fruit.x.px(), fruit.y.px()),
+        let overlay = compose::Overlay {
             paused: self.paused,
             game_over: self.game_over,
         };
-        scenes::draw_game(&mut self.fb, &view, kind_at);
-        self.flush()
+        let frame = self.comp.game(map, state, overlay);
+        Self::transmit(
+            frame,
+            &self.layout,
+            &mut self.ids,
+            &mut self.scaled,
+            &mut self.out,
+        )
     }
 
     pub fn render_menu(&mut self, screen: &MenuScreen) -> io::Result<()> {
-        self.ensure_scene(SceneKind::Menu, scenes::MENU_W, scenes::MENU_H)?;
-        scenes::compose_menu(&mut self.fb, screen);
-        self.flush()
+        self.ensure_scene(SceneKind::Menu, compose::MENU_W, compose::MENU_H)?;
+        let frame = self.comp.menu(screen);
+        Self::transmit(
+            frame,
+            &self.layout,
+            &mut self.ids,
+            &mut self.scaled,
+            &mut self.out,
+        )
     }
 
     pub fn render_loading(&mut self, screen: &LoadingScreen) -> io::Result<()> {
-        self.ensure_scene(SceneKind::Loading, scenes::MENU_W, scenes::MENU_H)?;
-        scenes::compose_loading(&mut self.fb, screen);
-        self.flush()
+        self.ensure_scene(SceneKind::Loading, compose::MENU_W, compose::MENU_H)?;
+        let frame = self.comp.loading(screen);
+        Self::transmit(
+            frame,
+            &self.layout,
+            &mut self.ids,
+            &mut self.scaled,
+            &mut self.out,
+        )
     }
 
     /// Poll input/resize events, waiting up to `timeout`.
@@ -259,14 +256,14 @@ impl Renderer {
     }
 
     /// Switch scene / logical resolution; repaints the terminal black on any
-    /// scene change or resolution change (and recomputes the layout).
+    /// scene change or resolution change (and recomputes the layout). The
+    /// compositor sizes its own frame; this only adapts the tty side.
     fn ensure_scene(&mut self, scene: SceneKind, lw: usize, lh: usize) -> io::Result<()> {
         if self.scene == scene && self.logical == (lw, lh) {
             return Ok(());
         }
         self.scene = scene;
         self.logical = (lw, lh);
-        self.fb.resize(lw, lh);
         self.layout = terminal::compute_layout(lw, lh)?;
         terminal::paint_black(&self.layout)
     }
@@ -276,32 +273,40 @@ impl Renderer {
         terminal::paint_black(&self.layout)
     }
 
-    /// Scale the framebuffer, assemble the kitty frame, write it in a single
-    /// syscall, and swap the double-buffered ids.
-    fn flush(&mut self) -> io::Result<()> {
+    /// The tty half of the adapter: scale the composed frame, assemble the
+    /// kitty escape stream, write it in a single syscall, and swap the
+    /// double-buffered ids. Takes fields (not `&mut self`) so the frame can
+    /// stay borrowed from the compositor.
+    fn transmit(
+        frame: &compose::Frame,
+        layout: &terminal::Layout,
+        ids: &mut (u32, u32),
+        scaled: &mut Vec<u8>,
+        out: &mut Vec<u8>,
+    ) -> io::Result<()> {
         framebuffer::scale_up(
-            self.fb.data(),
-            self.fb.width(),
-            self.fb.height(),
-            self.layout.scale,
-            &mut self.scaled,
+            frame.data(),
+            frame.width(),
+            frame.height(),
+            layout.scale,
+            scaled,
         );
         let params = kitty::FrameParams {
-            width: self.fb.width() * self.layout.scale,
-            height: self.fb.height() * self.layout.scale,
-            row: self.layout.anchor_row,
-            col: self.layout.anchor_col,
-            new_id: self.ids.0,
-            old_id: self.ids.1,
+            width: frame.width() * layout.scale,
+            height: frame.height() * layout.scale,
+            row: layout.anchor_row,
+            col: layout.anchor_col,
+            new_id: ids.0,
+            old_id: ids.1,
             compress: true,
         };
-        kitty::write_frame(&mut self.out, &self.scaled, &params);
+        kitty::write_frame(out, scaled, &params);
         {
             let mut stdout = io::stdout().lock();
-            stdout.write_all(&self.out)?;
+            stdout.write_all(out)?;
             stdout.flush()?;
         }
-        self.ids = (self.ids.1, self.ids.0);
+        *ids = (ids.1, ids.0);
         Ok(())
     }
 }
@@ -334,29 +339,4 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers) -> Option<Key> {
         },
         _ => return None,
     })
-}
-
-/// Internal APIs re-exported for the crate's CPU-only render tests
-/// (tests/render_*.rs). Not part of the public contract.
-#[doc(hidden)]
-pub mod test_api {
-    pub use super::font::{
-        GLYPH_W, draw_mini_number, draw_text, draw_text_scaled, glyph, mini_number_width,
-        text_width,
-    };
-    pub use super::framebuffer::{Frame, scale_up};
-    pub use super::kitty::{CHUNK, FrameParams, write_frame};
-    pub use super::layout::FrameLayout;
-    pub use super::scenes::{
-        GameView, MENU_H, MENU_W, TileKind, cell_kind, compose_loading, compose_maze_layer,
-        compose_menu, draw_game, draw_hud, flash_is_white,
-    };
-    pub use super::sprites::{
-        BODY, CYAN, DOOR_PINK, DOT_PEACH, ENERGIZER, EYES_D, EYES_L, EYES_R, EYES_U, FRIGHT_A,
-        FRIGHT_B, FRIGHT_BLUE, FRIGHT_FLASH_REMAP, GHOST_A, GHOST_B, GREEN, IDENTITY, MAZE_BLUE,
-        ORANGE, PAC_CLOSED, PAC_OPEN_D, PAC_OPEN_L, PAC_OPEN_R, PAC_OPEN_U, PALETTE, PINK, RED,
-        Sprite, TAN, TRANSPARENT, WHITE, YELLOW, body_remap, eyes_sprite, fright_sprite,
-        fruit_sprite, ghost_body, ghost_remap, life_sprite, pac_death_sprite, pac_sprite, rgb,
-    };
-    pub use super::terminal::{Layout, layout_for};
 }

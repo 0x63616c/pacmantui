@@ -14,7 +14,7 @@
 use crate::map::Map;
 use crate::types::TILE_PX;
 
-use super::scenes::{TileKind, cell_kind};
+use super::compose::{TileKind, cell_kind};
 
 /// Geometry of one composed gameplay frame for one map. The interface is the
 /// set of mapping queries below; the pad rows are an implementation detail.

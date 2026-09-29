@@ -1,7 +1,9 @@
-//! Scene composition tests: maze auto-tiling, gameplay frame, HUD, menu,
-//! loading — all CPU-only against the framebuffer, no tty, no `Map`.
+//! Scene composition tests through the compositor's public interface: maze
+//! auto-tiling, gameplay frame, HUD, menu, loading — all CPU-only composed
+//! frames, no tty, no `Map` (synthetic grids drive the `Maze` seam).
 
-use pacmantui::render::test_api::*;
+use pacmantui::render::compose::{Compositor, Frame, Maze, Overlay, TileKind};
+use pacmantui::render::layout::FrameLayout;
 use pacmantui::render::{LoadingScreen, MenuItem, MenuScreen};
 use pacmantui::sim::timings;
 use pacmantui::types::{
@@ -17,143 +19,254 @@ const DOOR_PINK_RGB: [u8; 3] = [255, 184, 222];
 const PEACH_RGB: [u8; 3] = [255, 184, 174];
 const CYAN_RGB: [u8; 3] = [0, 255, 255];
 
-fn layer_px(layer: &[u8], wpx: usize, x: i32, y: i32) -> [u8; 3] {
-    let o = (y as usize * wpx + x as usize) * 3;
-    [layer[o], layer[o + 1], layer[o + 2]]
+/// Synthetic-grid adapter on the compositor's `Maze` seam (the test twin of
+/// the production `Map` adapter).
+struct Grid {
+    id: &'static str,
+    tw: i32,
+    th: i32,
+    kind: fn(i32, i32) -> TileKind,
+    fruit_px: (i32, i32),
+}
+
+impl Maze for Grid {
+    fn id(&self) -> &str {
+        self.id
+    }
+    fn size(&self) -> (i32, i32) {
+        (self.tw, self.th)
+    }
+    fn kind(&self, x: i32, y: i32) -> TileKind {
+        (self.kind)(x, y)
+    }
+    fn fruit_px(&self) -> (i32, i32) {
+        self.fruit_px
+    }
+}
+
+fn compose_on(g: &Grid, st: &RenderState, paused: bool, game_over: bool) -> Frame {
+    let mut c = Compositor::new();
+    c.game(g, st, Overlay { paused, game_over }).clone()
+}
+
+/// Bare state for maze-layer tests: no pellets, no visible actors, minimal
+/// HUD (one life, no fruit history), so the maze band holds layer pixels
+/// only and the HUD bands hold at most white text.
+fn bare_state(tw: i32, th: i32) -> RenderState {
+    let mut st = base_state();
+    st.pac_visible = false;
+    for g in &mut st.ghosts {
+        g.visible = false;
+    }
+    st.lives = 1;
+    st.fruit_history.clear();
+    st.pellets = vec![false; (tw * th) as usize];
+    st
 }
 
 // --- maze auto-tiling --------------------------------------------------------
 
+fn wall_block_kind(x: i32, y: i32) -> TileKind {
+    // 8x8 open grid with a 2x2 wall block at tiles (3,3)-(4,4).
+    if (3..=4).contains(&x) && (3..=4).contains(&y) {
+        TileKind::Wall
+    } else {
+        TileKind::Open
+    }
+}
+
+/// The all-open 8x8 grid pads like Vertigo: maze band starts at pixel 24.
+const WOY: i32 = 24;
+
+fn wall_block_grid() -> Grid {
+    let g = Grid {
+        id: "wall-block-8x8",
+        tw: 8,
+        th: 8,
+        kind: wall_block_kind,
+        fruit_px: (32, 32),
+    };
+    let lay = FrameLayout::new(g.tw, g.th, &g.kind);
+    assert_eq!(lay.maze_origin_px(), (0, WOY));
+    g
+}
+
 #[test]
 fn wall_block_outline_with_rounded_corners() {
-    // 8x8 open grid with a 2x2 wall block at tiles (3,3)-(4,4).
-    let kind = |x: i32, y: i32| {
-        if (3..=4).contains(&x) && (3..=4).contains(&y) {
-            TileKind::Wall
-        } else {
-            TileKind::Open
-        }
-    };
-    let layer = compose_maze_layer(8, 8, &kind, false);
-    let w = 64;
+    let g = wall_block_grid();
+    let fb = compose_on(&g, &bare_state(8, 8), false, false);
     // Top contour of tile (3,3): line at local y=2, x 4..7 (trimmed at the
-    // rounded corner) -> global y=26, x=28..31.
+    // rounded corner) -> maze px y=26, x=28..31.
     for x in 28..=31 {
-        assert_eq!(layer_px(&layer, w, x, 26), MAZE_BLUE_RGB, "top line x={x}");
+        assert_eq!(fb.get(x, 26 + WOY), MAZE_BLUE_RGB, "top line x={x}");
     }
-    // Left contour: global x=26, y=28..31.
+    // Left contour: maze px x=26, y=28..31.
     for y in 28..=31 {
-        assert_eq!(layer_px(&layer, w, 26, y), MAZE_BLUE_RGB, "left line y={y}");
+        assert_eq!(fb.get(26, y + WOY), MAZE_BLUE_RGB, "left line y={y}");
     }
     // Rounded NW corner diagonal pixel at local (3,3) -> (27,27).
-    assert_eq!(layer_px(&layer, w, 27, 27), MAZE_BLUE_RGB);
+    assert_eq!(fb.get(27, 27 + WOY), MAZE_BLUE_RGB);
     // Line continues into tile (4,3): y=26, x=32..35, and its NE corner.
-    assert_eq!(layer_px(&layer, w, 33, 26), MAZE_BLUE_RGB);
-    assert_eq!(layer_px(&layer, w, 36, 27), MAZE_BLUE_RGB);
+    assert_eq!(fb.get(33, 26 + WOY), MAZE_BLUE_RGB);
+    assert_eq!(fb.get(36, 27 + WOY), MAZE_BLUE_RGB);
     // Block interior stays black (no fill, contour only).
-    assert_eq!(layer_px(&layer, w, 31, 31), BLACK);
-    assert_eq!(layer_px(&layer, w, 32, 32), BLACK);
+    assert_eq!(fb.get(31, 31 + WOY), BLACK);
+    assert_eq!(fb.get(32, 32 + WOY), BLACK);
     // Far away stays black.
-    assert_eq!(layer_px(&layer, w, 4, 4), BLACK);
+    assert_eq!(fb.get(4, 4 + WOY), BLACK);
 }
 
 #[test]
 fn concave_corner_connects_perpendicular_lines() {
     // All wall except a single open tile at (4,4): the walls around it get
-    // concave arcs at the diagonal tiles.
-    let kind = |x: i32, y: i32| {
+    // concave arcs at the diagonal tiles. The single-tile open box embeds
+    // its own dead rows, so this grid gets no padding (maze origin 0).
+    fn kind(x: i32, y: i32) -> TileKind {
         if (x, y) == (4, 4) {
             TileKind::Open
         } else {
             TileKind::Wall
         }
+    }
+    let g = Grid {
+        id: "concave-9x9",
+        tw: 9,
+        th: 9,
+        kind,
+        fruit_px: (36, 36),
     };
-    let layer = compose_maze_layer(9, 9, &kind, false);
-    let w = 72;
+    assert_eq!(FrameLayout::new(9, 9, &kind).maze_origin_px(), (0, 0));
+    let fb = compose_on(&g, &bare_state(9, 9), false, false);
     // Tile (3,3) is the NW diagonal neighbour: concave SE arc pixels at
     // local (5,7),(6,6),(7,5) -> global (29,31),(30,30),(31,29).
-    assert_eq!(layer_px(&layer, w, 30, 30), MAZE_BLUE_RGB);
-    assert_eq!(layer_px(&layer, w, 29, 31), MAZE_BLUE_RGB);
-    assert_eq!(layer_px(&layer, w, 31, 29), MAZE_BLUE_RGB);
+    assert_eq!(fb.get(30, 30), MAZE_BLUE_RGB);
+    assert_eq!(fb.get(29, 31), MAZE_BLUE_RGB);
+    assert_eq!(fb.get(31, 29), MAZE_BLUE_RGB);
 }
 
 #[test]
 fn door_renders_pink_bar() {
-    let kind = |x: i32, y: i32| {
+    fn kind(x: i32, y: i32) -> TileKind {
         if (x, y) == (1, 1) {
             TileKind::Door
         } else {
             TileKind::Open
         }
-    };
-    let layer = compose_maze_layer(3, 3, &kind, false);
-    let w = 24;
-    for x in 8..16 {
-        assert_eq!(layer_px(&layer, w, x, 11), DOOR_PINK_RGB, "bar x={x}");
-        assert_eq!(layer_px(&layer, w, x, 12), DOOR_PINK_RGB);
     }
-    assert_eq!(layer_px(&layer, w, 8, 10), BLACK);
-    assert_eq!(layer_px(&layer, w, 8, 13), BLACK);
+    let g = Grid {
+        id: "door-3x3",
+        tw: 3,
+        th: 3,
+        kind,
+        fruit_px: (12, 12),
+    };
+    let oy = 24; // all-open 3x3 grid pads like Vertigo
+    assert_eq!(FrameLayout::new(3, 3, &kind).maze_origin_px(), (0, oy));
+    let fb = compose_on(&g, &bare_state(3, 3), false, false);
+    for x in 8..16 {
+        assert_eq!(fb.get(x, 11 + oy), DOOR_PINK_RGB, "bar x={x}");
+        assert_eq!(fb.get(x, 12 + oy), DOOR_PINK_RGB);
+    }
+    assert_eq!(fb.get(8, 10 + oy), BLACK);
+    assert_eq!(fb.get(8, 13 + oy), BLACK);
 }
 
 #[test]
 fn white_flash_variant_recolors_lines() {
-    let kind = |x: i32, y: i32| {
-        if (3..=4).contains(&x) && (3..=4).contains(&y) {
-            TileKind::Wall
-        } else {
-            TileKind::Open
-        }
+    let g = wall_block_grid();
+    let blue = compose_on(&g, &bare_state(8, 8), false, false);
+    let mut st = bare_state(8, 8);
+    st.sequence = Sequence::LevelFlash {
+        tick: timings::LEVEL_CLEAR_FREEZE_TICKS, // first white half-period
     };
-    let blue = compose_maze_layer(8, 8, &kind, false);
-    let white = compose_maze_layer(8, 8, &kind, true);
-    let w = 64;
-    assert_eq!(layer_px(&blue, w, 28, 26), MAZE_BLUE_RGB);
-    assert_eq!(layer_px(&white, w, 28, 26), WHITE_RGB);
-    // Same geometry: every blue pixel is white and vice versa.
-    let blue_set: Vec<bool> = blue.chunks(3).map(|c| c != [0, 0, 0]).collect();
-    let white_set: Vec<bool> = white.chunks(3).map(|c| c != [0, 0, 0]).collect();
-    assert_eq!(blue_set, white_set);
+    let white = compose_on(&g, &st, false, false);
+    assert_eq!(blue.get(28, 26 + WOY), MAZE_BLUE_RGB);
+    assert_eq!(white.get(28, 26 + WOY), WHITE_RGB);
+    // Same geometry inside the maze band: every blue pixel is white and
+    // vice versa (the bare maze band holds nothing but contour lines).
+    for y in WOY..(WOY + 64) {
+        for x in 0..64 {
+            let b = blue.get(x, y);
+            let w = white.get(x, y);
+            assert_eq!(
+                b != BLACK,
+                w != BLACK,
+                "geometry mismatch at ({x},{y}): blue {b:?} vs white {w:?}"
+            );
+            if b != BLACK {
+                assert_eq!(b, MAZE_BLUE_RGB);
+                assert_eq!(w, WHITE_RGB);
+            }
+        }
+    }
 }
 
 #[test]
 fn dead_space_padding_stays_black_and_border_gets_outer_line() {
     // 6x8 grid shaped like the classic screen: HUD rows 0-1 and 6-7 all wall
-    // (dead space), border walls rows 2/5 + cols 0/5, open interior.
-    let kind = |x: i32, y: i32| {
+    // (dead space), border walls rows 2/5 + cols 0/5, open interior. One
+    // embedded dead row on top -> the frame adds 2 more (maze origin 8).
+    fn kind(x: i32, y: i32) -> TileKind {
         if y <= 1 || y >= 6 || y == 2 || y == 5 || x == 0 || x == 5 {
             TileKind::Wall
         } else {
             TileKind::Open
         }
+    }
+    let g = Grid {
+        id: "dead-space-6x8",
+        tw: 6,
+        th: 8,
+        kind,
+        fruit_px: (24, 32),
     };
-    let layer = compose_maze_layer(6, 8, &kind, false);
-    let w = 48;
-    // HUD dead space: nothing drawn in pixel rows 0..16 or 48..64.
+    let oy = 8;
+    assert_eq!(FrameLayout::new(6, 8, &kind).maze_origin_px(), (0, oy));
+    let fb = compose_on(&g, &bare_state(6, 8), false, false);
+    // Dead space (map px rows 0..16 and 48..64): the maze layer draws
+    // nothing there — only black, or the frame's own white HUD text.
     for y in (0..16).chain(48..64) {
         for x in 0..48 {
-            assert_eq!(layer_px(&layer, w, x, y), BLACK, "dead space at ({x},{y})");
+            let px = fb.get(x, y + oy);
+            assert!(
+                px == BLACK || px == WHITE_RGB,
+                "non-HUD pixel {px:?} in dead space at ({x},{y})"
+            );
+            assert_ne!(px, MAZE_BLUE_RGB, "maze pixel in dead space at ({x},{y})");
         }
     }
-    // Top border tile (1,2): outer contour line at global y = 2*8+2 = 18.
-    assert_eq!(layer_px(&layer, w, 12, 18), MAZE_BLUE_RGB);
+    // Top border tile (1,2): outer contour line at map px y = 2*8+2 = 18.
+    assert_eq!(fb.get(12, 18 + oy), MAZE_BLUE_RGB);
     // And inner contour facing the open interior at y = 2*8+5 = 21.
-    assert_eq!(layer_px(&layer, w, 12, 21), MAZE_BLUE_RGB);
+    assert_eq!(fb.get(12, 21 + oy), MAZE_BLUE_RGB);
 }
 
 #[test]
 fn flash_phase_from_tick() {
+    // Composed-frame phase check: a known wall pixel is white exactly during
+    // the flash's white half-periods (after the freeze, for N flashes).
     let f = timings::LEVEL_CLEAR_FREEZE_TICKS;
     let h = timings::LEVEL_CLEAR_FLASH_HALF_TICKS;
     let n = timings::LEVEL_CLEAR_FLASHES;
-    assert!(!flash_is_white(0));
-    assert!(!flash_is_white(f - 1));
-    assert!(flash_is_white(f)); // first white half-period
-    assert!(flash_is_white(f + h - 1));
-    assert!(!flash_is_white(f + h)); // back to blue
-    assert!(flash_is_white(f + 2 * h)); // second flash
-    assert!(!flash_is_white(f + 2 * n * h)); // sequence over
-    assert!(!flash_is_white(f + 2 * n * h + 100));
+    let g = wall_block_grid();
+    let is_white = |tick: u32| {
+        let mut st = bare_state(8, 8);
+        st.sequence = Sequence::LevelFlash { tick };
+        let fb = compose_on(&g, &st, false, false);
+        match fb.get(28, 26 + WOY) {
+            WHITE_RGB => true,
+            MAZE_BLUE_RGB => false,
+            other => panic!("wall pixel is neither blue nor white: {other:?}"),
+        }
+    };
+    assert!(!is_white(0));
+    assert!(!is_white(f - 1));
+    assert!(is_white(f)); // first white half-period
+    assert!(is_white(f + h - 1));
+    assert!(!is_white(f + h)); // back to blue
+    assert!(is_white(f + 2 * h)); // second flash
+    assert!(!is_white(f + 2 * n * h)); // sequence over
+    assert!(!is_white(f + 2 * n * h + 100));
 }
 
 // --- gameplay frame ----------------------------------------------------------
@@ -213,21 +326,16 @@ fn test_kind(x: i32, y: i32) -> TileKind {
 const OY: i32 = 24;
 
 fn compose(state: &RenderState, paused: bool, game_over: bool) -> Frame {
-    let layer = compose_maze_layer(10, 10, &test_kind, false);
-    let lay = FrameLayout::new(10, 10, &test_kind);
-    assert_eq!(lay.maze_origin_px(), (0, OY));
-    let (w, h) = lay.frame_px();
-    let mut fb = Frame::new(w, h);
-    let view = GameView {
-        layer: &layer,
-        layout: lay,
-        state,
+    let g = Grid {
+        id: "test-10x10",
+        tw: 10,
+        th: 10,
+        kind: test_kind,
         fruit_px: (40, 60), // overlay anchor (map px) inside the test maze
-        paused,
-        game_over,
     };
-    draw_game(&mut fb, &view, test_kind);
-    fb
+    let lay = FrameLayout::new(g.tw, g.th, &g.kind);
+    assert_eq!(lay.maze_origin_px(), (0, OY));
+    compose_on(&g, state, paused, game_over)
 }
 
 #[test]
@@ -367,18 +475,35 @@ fn classic_shape(_x: i32, y: i32) -> TileKind {
     }
 }
 
-fn classic_layout() -> FrameLayout {
-    let lay = FrameLayout::new(28, 36, &classic_shape);
+/// Compose a HUD-only frame (no pellets, no visible actors) on the
+/// classic-shaped grid: the HUD anchors land exactly as on the classic map.
+fn hud_frame(st: &RenderState) -> Frame {
+    let g = Grid {
+        id: "classic-shape-28x36",
+        tw: 28,
+        th: 36,
+        kind: classic_shape,
+        fruit_px: (112, 164),
+    };
+    let lay = FrameLayout::new(g.tw, g.th, &g.kind);
     assert_eq!(lay.frame_tiles(), (28, 36));
     assert_eq!(lay.maze_origin_px(), (0, 0));
-    lay
+    compose_on(&g, st, false, false)
+}
+
+fn hud_state() -> RenderState {
+    let mut st = base_state();
+    st.pac_visible = false;
+    for g in &mut st.ghosts {
+        g.visible = false;
+    }
+    st.pellets = vec![false; 28 * 36];
+    st
 }
 
 #[test]
 fn hud_score_lives_and_fruit_history() {
-    let mut fb = Frame::new(224, 288);
-    let st = base_state();
-    draw_hud(&mut fb, &st, &classic_layout());
+    let fb = hud_frame(&hud_state());
     // "1UP" at col 3: glyph '1' top row pixels at (26,0),(27,0).
     assert_eq!(fb.get(26, 0), WHITE_RGB);
     // Score 1234 right-aligned ending col 6: text starts x=24, row y=8.
@@ -397,12 +522,11 @@ fn hud_score_lives_and_fruit_history() {
 
 #[test]
 fn hud_score_display_rolls_at_a_million() {
-    let mut fb = Frame::new(224, 288);
-    let mut st = base_state();
+    let mut st = hud_state();
     st.score = 1_000_005;
     st.lives = 1; // no spare icons
     st.fruit_history.clear();
-    draw_hud(&mut fb, &st, &classic_layout());
+    let fb = hud_frame(&st);
     // Displays "05": two glyphs ending at col 6 -> x=40..56.
     assert_eq!(fb.get(41, 8), WHITE_RGB); // '0' left edge pixel (0x78 bit1)
     // Nothing further left than the two digits on the score row... the high
@@ -414,9 +538,13 @@ fn hud_score_display_rolls_at_a_million() {
 
 // --- menu / loading ----------------------------------------------------------
 
+fn menu_frame(screen: &MenuScreen) -> Frame {
+    let mut c = Compositor::new();
+    c.menu(screen).clone()
+}
+
 #[test]
 fn menu_title_selection_and_footer() {
-    let mut fb = Frame::new(224, 288);
     let screen = MenuScreen {
         title: "PACMANTUI".into(),
         items: vec![
@@ -440,7 +568,7 @@ fn menu_title_selection_and_footer() {
         footer: "ARROWS MOVE".into(),
         decorated: false,
     };
-    compose_menu(&mut fb, &screen);
+    let fb = menu_frame(&screen);
     // Title 2x, centered: 9 chars * 16 = 144 -> x=40; 'P' row0 -> (40,32).
     assert_eq!(fb.get(40, 32), YELLOW_RGB);
     // Selected marker '>' at x=24, first item row y=128.
@@ -462,7 +590,6 @@ fn menu_title_selection_and_footer() {
 
 #[test]
 fn menu_decoration_parade() {
-    let mut fb = Frame::new(224, 288);
     let screen = MenuScreen {
         title: "T".into(),
         items: Vec::new(),
@@ -470,16 +597,15 @@ fn menu_decoration_parade() {
         footer: String::new(),
         decorated: true,
     };
-    compose_menu(&mut fb, &screen);
+    let fb = menu_frame(&screen);
     // Blinky body pixel at (40+5, 72+1).
     assert_eq!(fb.get(45, 73), RED_RGB);
     // Pac at x=144: local (3,7) yellow -> (147,79).
     assert_eq!(fb.get(147, 79), YELLOW_RGB);
     // Without decoration that row is empty.
-    let mut fb2 = Frame::new(224, 288);
     let mut plain = screen.clone();
     plain.decorated = false;
-    compose_menu(&mut fb2, &plain);
+    let fb2 = menu_frame(&plain);
     assert_eq!(fb2.get(45, 73), BLACK);
 }
 
@@ -487,26 +613,22 @@ fn menu_decoration_parade() {
 fn loading_bar_reflects_progress() {
     let count_yellow =
         |fb: &Frame| (0..224).filter(|&x| fb.get(x, 151) == YELLOW_RGB).count() as i32;
-    for (progress, expect) in [(0.0f32, 0), (0.5, 78), (1.0, 156)] {
-        let mut fb = Frame::new(224, 288);
-        let screen = LoadingScreen {
-            message: "LOADING MAPS".into(),
+    let loading_frame = |message: &str, progress: f32| {
+        let mut c = Compositor::new();
+        c.loading(&LoadingScreen {
+            message: message.into(),
             progress,
-        };
-        compose_loading(&mut fb, &screen);
+        })
+        .clone()
+    };
+    for (progress, expect) in [(0.0f32, 0), (0.5, 78), (1.0, 156)] {
+        let fb = loading_frame("LOADING MAPS", progress);
         assert_eq!(count_yellow(&fb), expect, "progress {progress}");
         // Border corners white.
         assert_eq!(fb.get(32, 148), WHITE_RGB);
         assert_eq!(fb.get(191, 159), WHITE_RGB);
     }
     // Out-of-range progress clamps.
-    let mut fb = Frame::new(224, 288);
-    compose_loading(
-        &mut fb,
-        &LoadingScreen {
-            message: String::new(),
-            progress: 7.0,
-        },
-    );
+    let fb = loading_frame("", 7.0);
     assert_eq!(count_yellow(&fb), 156);
 }
